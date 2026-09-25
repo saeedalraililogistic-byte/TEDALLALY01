@@ -17,6 +17,25 @@
   </head>
   <body class="bg-[#faf8f9] dark:bg-[#09090d] text-slate-900 dark:text-slate-100 font-['Cairo',sans-serif] antialiased min-h-screen">
     <div id="root"></div>
+    <script>
+      // Force unregister all legacy service workers and clear caches immediately
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (var i = 0; i < registrations.length; i++) {
+            registrations[i].unregister().then(function(success) {
+              if (success) console.log('Successfully unregistered legacy service worker');
+            });
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var i = 0; i < names.length; i++) {
+            caches.delete(names[i]);
+          }
+        });
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
