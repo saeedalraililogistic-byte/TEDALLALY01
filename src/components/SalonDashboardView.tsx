@@ -114,7 +114,7 @@ export const SalonDashboardView: React.FC<Props> = ({
   // Form State for Add Service
   const [formData, setFormData] = useState({
     name: 'قص شعر',
-    category: 'عناية بالشعر',
+    category: 'jn7c5aa52jt70khgwsx0cb92c58cgxrk',
     price: '0.00',
     duration: '60',
     description: '',
@@ -200,7 +200,7 @@ export const SalonDashboardView: React.FC<Props> = ({
     setIsAddingService(false);
     setFormData({
       name: '',
-      category: 'عناية بالشعر',
+      category: 'jn7c5aa52jt70khgwsx0cb92c58cgxrk',
       price: '0.00',
       duration: '60',
       description: '',
@@ -211,8 +211,15 @@ export const SalonDashboardView: React.FC<Props> = ({
   // Exact free salon tools provided by Tedallaly platform (including high-converting salon features)
   const freeServicesForSalon = [
     { title: 'نظرة عامة', icon: '📊', id: 'overview' },
-    { title: 'درع منع التضارب 100% 🛡️', icon: '🛡️', id: 'conflict_shield' },
+    { title: 'الخدمات', icon: '✂️', id: 'services' },
+    { title: 'الحجوزات', icon: '📅', id: 'bookings' },
     { title: 'عروض اللحظة الأخيرة ⚡', icon: '⚡', id: 'flash_booster' },
+    { title: 'الاتفاقية والتحقق', icon: '🛡️', id: 'verification' },
+    { title: 'المدفوعات والسحب والعربون', icon: '💳', id: 'payouts' },
+    { title: 'المبيعات اليدوية', icon: '💵', id: 'pos' },
+    { title: 'الفريق والعمولات', icon: '👥', id: 'team' },
+    { title: 'المحاسبة والتقارير', icon: '📈', id: 'accounting' },
+    { title: 'درع منع التضارب 100% 🛡️', icon: '🛡️', id: 'conflict_shield' },
     { title: 'اشتراكات الجمال VIP 👑', icon: '👑', id: 'subscriptions' },
     { title: 'استهداف الواتساب الذكي 💬', icon: '💬', id: 'whatsapp_recall' },
     { title: 'منسق باقات العرائس 👰', icon: '👰', id: 'bridal_matrix' },
@@ -222,15 +229,9 @@ export const SalonDashboardView: React.FC<Props> = ({
     { title: 'كروت الإهداء الفاخرة 🎁', icon: '🎁', id: 'gift_vouchers' },
     { title: 'فريق المناسبات والخدمة الخارجية 🚗', icon: '🚗', id: 'external_glam' },
     { title: 'كتالوج الإلهام والاستشارة 🎨', icon: '🎨', id: 'visual_consultation' },
-    { title: 'الحجوزات', icon: '📅', id: 'bookings' },
     { title: 'التقويم', icon: '🗓️', id: 'calendar' },
-    { title: 'المبيعات اليدوية', icon: '💵', id: 'pos' },
     { title: 'المصاريف والمخزون', icon: '📦', id: 'inventory' },
-    { title: 'الخدمات', icon: '✂️', id: 'services' },
-    { title: 'الفريق والعمولات', icon: '👥', id: 'team' },
     { title: 'أوقات العمل', icon: '⏰', id: 'hours' },
-    { title: 'المدفوعات والسحب والعربون', icon: '💳', id: 'payouts' },
-    { title: 'المحاسبة والتقارير', icon: '📈', id: 'accounting' },
     { title: 'الرواتب والأداء', icon: '💰', id: 'payroll' },
     { title: 'الباقات الموسمية', icon: '🎁', id: 'packages' },
     { title: 'الكوبونات والعروض', icon: '🏷️', id: 'coupons' },
@@ -241,7 +242,6 @@ export const SalonDashboardView: React.FC<Props> = ({
     { title: 'التقييمات', icon: '⭐', id: 'reviews' },
     { title: 'الأداء والتحليلات', icon: '📊', id: 'analytics' },
     { title: 'الملف الشخصي', icon: '🏢', id: 'profile' },
-    { title: 'الاتفاقية والتحقق', icon: '🛡️', id: 'verification' },
     { title: 'رابط المشاركة + QR', icon: '📲', id: 'qr' },
   ];
 
@@ -361,23 +361,25 @@ export const SalonDashboardView: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Mobile / Tablet Responsive Tool Selector Bar (Visible only on < lg screens) */}
-      <div className="lg:hidden bg-white dark:bg-[#121218] border border-rose-100 dark:border-slate-800/80 rounded-2xl p-3 shadow-xs space-y-3">
+      {/* Mobile / Tablet Responsive Tool Selector Bar (Prominent & Always Accessible) */}
+      <div className="lg:hidden bg-white dark:bg-[#121218] border-2 border-rose-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-lg">{freeServicesForSalon.find(s => s.title === activeMenu)?.icon || '⚡'}</span>
+            <span className="text-xl p-2 rounded-xl bg-rose-50 dark:bg-slate-900 border border-rose-100 dark:border-slate-800">
+              {freeServicesForSalon.find(s => s.title === activeMenu)?.icon || '⚡'}
+            </span>
             <div>
-              <div className="text-[10px] text-slate-400 font-bold">الأداة النشطة حالياً</div>
-              <div className="text-xs font-black text-slate-900 dark:text-white">{activeMenu}</div>
+              <div className="text-[10px] text-slate-400 font-bold">الأداة المفتوحة حالياً</div>
+              <div className="text-xs font-black text-rose-600 dark:text-rose-400">{activeMenu}</div>
             </div>
           </div>
 
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 dark:bg-slate-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-slate-700/80 rounded-xl text-xs font-bold transition-all shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-rose-600 to-pink-600 text-white rounded-xl text-xs font-black shadow-md shadow-rose-600/20 active:scale-95 transition-all cursor-pointer"
           >
             {isMobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            <span>{isMobileMenuOpen ? 'إغلاق الأدوات' : 'تغيير الأداة (28 أداة) ⚡'}</span>
+            <span>{isMobileMenuOpen ? 'تصغير القائمة' : 'كافة أدوات الصالون (28 أداة) ⚡'}</span>
           </button>
         </div>
 
@@ -385,22 +387,25 @@ export const SalonDashboardView: React.FC<Props> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
           {[
             { title: 'نظرة عامة', icon: '📊' },
-            { title: 'عروض اللحظة الأخيرة ⚡', icon: '⚡' },
+            { title: 'الخدمات', icon: '✂️' },
             { title: 'الحجوزات', icon: '📅' },
-            { title: 'الفريق والعمولات', icon: '👥' },
-            { title: 'الأداء والتحليلات', icon: '📈' },
+            { title: 'عروض اللحظة الأخيرة ⚡', icon: '⚡' },
+            { title: 'الاتفاقية والتحقق', icon: '🛡️' },
             { title: 'المدفوعات والسحب والعربون', icon: '💳' },
+            { title: 'الفريق والعمولات', icon: '👥' },
+            { title: 'المحاسبة والتقارير', icon: '📈' },
           ].map(quick => (
             <button
               key={quick.title}
               onClick={() => {
                 setActiveMenu(quick.title);
                 setIsMobileMenuOpen(false);
+                setIsAddingService(false);
               }}
-              className={`shrink-0 px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all ${
+              className={`shrink-0 px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
                 activeMenu === quick.title
                   ? 'bg-rose-600 text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-rose-50'
+                  : 'bg-rose-50/70 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-rose-100 border border-rose-100 dark:border-slate-800'
               }`}
             >
               <span>{quick.icon}</span>
@@ -409,20 +414,20 @@ export const SalonDashboardView: React.FC<Props> = ({
           ))}
         </div>
 
-        {/* Expandable Mobile Grid */}
+        {/* Full Grid of All 28 Tools for Mobile */}
         {isMobileMenuOpen && (
-          <div className="pt-3 border-t border-rose-100 dark:border-slate-800 space-y-2">
+          <div className="pt-3 border-t border-rose-100 dark:border-slate-800 space-y-2.5 animate-in fade-in duration-200">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 value={toolSearchQuery}
                 onChange={e => setToolSearchQuery(e.target.value)}
-                placeholder="ابحث في 28 أداة صالون..."
-                className="w-full pr-8 pl-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-rose-400 text-slate-800 dark:text-slate-200"
+                placeholder="ابحثي في 28 أداة صالون..."
+                className="w-full pr-8 pl-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-rose-400 text-slate-800 dark:text-slate-200"
               />
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-60 overflow-y-auto scrollbar-thin p-1">
+            <div className="grid grid-cols-2 gap-1.5 max-h-72 overflow-y-auto scrollbar-thin p-1">
               {freeServicesForSalon
                 .filter(item => !toolSearchQuery || item.title.includes(toolSearchQuery))
                 .map(item => (
@@ -433,13 +438,13 @@ export const SalonDashboardView: React.FC<Props> = ({
                       setIsMobileMenuOpen(false);
                       setIsAddingService(false);
                     }}
-                    className={`p-2 rounded-xl text-right text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+                    className={`p-2.5 rounded-xl text-right text-xs font-semibold flex items-center gap-2 border transition-all cursor-pointer ${
                       activeMenu === item.title
-                        ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/40 dark:border-rose-500/40 dark:text-rose-300 font-bold'
-                        : 'bg-white dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/80 text-slate-700 dark:text-slate-300 hover:border-rose-200'
+                        ? 'bg-rose-600 text-white font-bold shadow-xs'
+                        : 'bg-white dark:bg-slate-950/70 border-rose-100 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-rose-50'
                     }`}
                   >
-                    <span>{item.icon}</span>
+                    <span className="text-base">{item.icon}</span>
                     <span className="truncate">{item.title}</span>
                   </button>
                 ))}
@@ -887,13 +892,13 @@ export const SalonDashboardView: React.FC<Props> = ({
                   <div className="flex items-center justify-between">
                     <button
                       onClick={() => setIsAddingService(true)}
-                      className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-md shadow-rose-600/20"
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-md shadow-rose-600/20 cursor-pointer"
                     >
-                      <span>Add Service</span>
                       <Plus className="w-4 h-4" />
+                      <span>إضافة خدمة جديدة لصالونك</span>
                     </button>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                      services {salonServices.length}
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+                      إجمالي الخدمات: {salonServices.length}
                     </div>
                   </div>
 
@@ -920,9 +925,9 @@ export const SalonDashboardView: React.FC<Props> = ({
                             </span>
                             <button
                               onClick={() => onBookService(salon, s)}
-                              className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-rose-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-colors shadow-xs"
+                              className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-colors shadow-xs"
                             >
-                              حجز تجريبي
+                              معاينة وحجز الخدمة
                             </button>
                           </div>
                         </div>
@@ -945,18 +950,18 @@ export const SalonDashboardView: React.FC<Props> = ({
                   <div className="flex items-center justify-between border-b border-rose-100 dark:border-slate-800/80 pb-4">
                     <button
                       onClick={() => setIsAddingService(false)}
-                      className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1"
+                      className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer font-bold"
                     >
-                      <span>Back ←</span>
+                      <span>← رجوع لقائمة الخدمات</span>
                     </button>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Add Service</h3>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">إضافة خدمة جديدة</h3>
                   </div>
 
                   <form onSubmit={handleCreateService} className="space-y-4 max-w-xl mx-auto text-right">
                     {/* Service Name */}
                     <div className="space-y-1">
-                      <label className="text-xs text-slate-600 dark:text-slate-400 font-mono block">
-                        * Service Name
+                      <label className="text-xs text-slate-700 dark:text-slate-300 font-bold block">
+                        * اسم الخدمة (مثال: تسريحة ومكياج سهرة)
                       </label>
                       <input
                         type="text"
@@ -964,49 +969,50 @@ export const SalonDashboardView: React.FC<Props> = ({
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         className="w-full bg-white dark:bg-slate-950 border border-rose-400 dark:border-pink-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500/20"
-                        placeholder="قص شعر"
+                        placeholder="قص شعر واستشوار"
                       />
                     </div>
 
                     {/* Category */}
                     <div className="space-y-1">
-                      <label className="text-xs text-slate-600 dark:text-slate-400 font-mono block">
-                        * Category
+                      <label className="text-xs text-slate-700 dark:text-slate-300 font-bold block">
+                        * التصنيف الرئيسي للخدمة
                       </label>
                       <select
                         value={formData.category}
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        className="w-full bg-white dark:bg-slate-950 border border-rose-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-slate-300 outline-none focus:border-rose-500"
+                        className="w-full bg-white dark:bg-slate-950 border border-rose-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-slate-300 outline-none focus:border-rose-500 cursor-pointer"
                       >
-                        <option value="عناية بالشعر">عناية بالشعر (Hair Care)</option>
-                        <option value="مكياج وسهرات">مكياج وسهرات (Makeup)</option>
-                        <option value="أظافر وسبا">أظافر وسبا (Nails & Spa)</option>
-                        <option value="بشرة وتنظيف">بشرة وتنظيف (Skincare)</option>
-                        <option value="مساج واستجمام">مساج واستجمام (Massage)</option>
-                        <option value="حواجب ورموش">حواجب ورموش (Brows & Lashes)</option>
+                        <option value="jn7c5aa52jt70khgwsx0cb92c58cgxrk">عناية بالشعر (Hair Care)</option>
+                        <option value="jn75v9s4rmrg1nqbvffgy6005h8chsym">مكياج وسهرات (Makeup)</option>
+                        <option value="jn7bjeexwga0m8q44kxfsjx9tn8cgdaf">أظافر وسبا (Nails & Spa)</option>
+                        <option value="jn75h0jy0dqyp93bc1r8ve4cph8cgx1k">العناية بالبشرة (Skincare)</option>
+                        <option value="jn77n7e761wq1amqr3psxchrhh8chx6h">سبا واستجمام (Spa)</option>
+                        <option value="jn75q0xg3aw1mf49bbtn8xs1sn8cggqz">رموش وحواجب (Lashes & Brows)</option>
+                        <option value="jn75ebcrctpef3eh8egqaq6ds58che8h">إزالة الشعر (Waxing)</option>
                       </select>
                     </div>
 
                     {/* Price & Duration */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <label className="text-xs text-slate-400 font-mono block">
-                          * Duration (minutes)
+                        <label className="text-xs text-slate-700 dark:text-slate-300 font-bold block">
+                          * مدة الخدمة المتوقعة (بالدقائق)
                         </label>
                         <input
                           type="number"
                           required
                           value={formData.duration}
                           onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white outline-none"
+                          className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none"
                           placeholder="60"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-xs text-slate-300 font-bold flex items-center justify-between">
-                          <span>* السعر الإجمالي (شامل ضريبة القيمة المضافة 15%)</span>
-                          <span className="text-[10px] text-emerald-400 font-normal">إلزامياً شامل الضريبة</span>
+                        <label className="text-xs text-slate-700 dark:text-slate-300 font-bold flex items-center justify-between">
+                          <span>* السعر الإجمالي</span>
+                          <span className="text-[10px] text-emerald-500 font-bold">شامل 15% الضريبة</span>
                         </label>
                         <div className="relative">
                           <input
@@ -1015,18 +1021,18 @@ export const SalonDashboardView: React.FC<Props> = ({
                             required
                             value={formData.price}
                             onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl px-4 py-2.5 text-xs text-white outline-none font-mono"
+                            className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-rose-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none font-mono"
                             placeholder="150.00"
                           />
                           <span className="absolute left-3 top-2.5 text-slate-400 text-xs">SAR</span>
                         </div>
                         {Number(formData.price) > 0 && (
-                          <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-[10px] space-y-0.5 mt-1 text-slate-300">
+                          <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] space-y-0.5 mt-1 text-slate-600 dark:text-slate-300">
                             <div className="flex justify-between">
                               <span className="text-slate-400">السعر الأساسي غير الخاضع:</span>
                               <span className="font-mono">{(Number(formData.price) / 1.15).toFixed(2)} SAR</span>
                             </div>
-                            <div className="flex justify-between text-emerald-400 font-bold">
+                            <div className="flex justify-between text-emerald-500 font-bold">
                               <span>قيمة ضريبة الـ 15% المضمنة:</span>
                               <span className="font-mono">{(Number(formData.price) - (Number(formData.price) / 1.15)).toFixed(2)} SAR</span>
                             </div>
@@ -1037,29 +1043,29 @@ export const SalonDashboardView: React.FC<Props> = ({
 
                     {/* Description */}
                     <div className="space-y-1">
-                      <label className="text-xs text-slate-400 font-mono block">
-                        Description
+                      <label className="text-xs text-slate-700 dark:text-slate-300 font-bold block">
+                        وصف الخدمة وتفاصيلها للعميلات
                       </label>
                       <textarea
                         rows={3}
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white outline-none placeholder:text-slate-600"
-                        placeholder="...Describe this service"
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none placeholder:text-slate-400"
+                        placeholder="اكتبي تفاصيل المواد المستخدمة، والخطوات، وأي شروط خاصة..."
                       />
                     </div>
 
                     {/* Home Service Toggle */}
-                    <div className="pt-2 flex items-center justify-between border-t border-slate-800/80">
+                    <div className="pt-2 flex items-center justify-between border-t border-slate-200 dark:border-slate-800/80">
                       <input
                         type="checkbox"
                         checked={formData.isHomeService}
                         onChange={(e) => setFormData({ ...formData, isHomeService: e.target.checked })}
-                        className="w-4 h-4 accent-pink-600 rounded cursor-pointer"
+                        className="w-4 h-4 accent-rose-600 rounded cursor-pointer"
                         id="homeServiceToggle"
                       />
                       <label htmlFor="homeServiceToggle" className="text-right cursor-pointer">
-                        <div className="text-xs font-bold text-slate-200">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
                           متاح خدمة منزلية 🏠
                         </div>
                         <div className="text-[10px] text-slate-500">
@@ -1072,16 +1078,16 @@ export const SalonDashboardView: React.FC<Props> = ({
                     <div className="pt-4 flex items-center gap-3">
                       <button
                         type="submit"
-                        className="flex-1 py-2.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-xl transition-colors shadow-md shadow-pink-600/20"
+                        className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-colors shadow-md shadow-rose-600/20 cursor-pointer"
                       >
-                        Add Service
+                        حفظ ونشر الخدمة فوراً ✓
                       </button>
                       <button
                         type="button"
                         onClick={() => setIsAddingService(false)}
-                        className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs rounded-xl transition-colors"
+                        className="px-6 py-2.5 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
                       >
-                        Cancel
+                        إلغاء
                       </button>
                     </div>
                   </form>

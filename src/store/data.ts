@@ -102,45 +102,24 @@ export const initialServices: Service[] = [
     }))
 ];
 export const initialCategories: Category[] = rawData.categories || [];
-export const initialBookings: Booking[] = rawData.bookings || [];
+export const initialBookings: Booking[] = (rawData.bookings || []).filter(b => {
+  const serviceName = b.snapshot?.serviceName || '';
+  const totalAmount = b.snapshot?.totalAmount || 0;
+  // Filter out any 1.15 SAR test or cancelled draft bookings and Sara dummy items
+  if (totalAmount <= 5 || serviceName === 'Sara' || serviceName === 'Ceut' || b.status === 'customer_cancelled' || b.status === 'timeout_cancelled') {
+    return false;
+  }
+  return true;
+});
 
 export const initialUsers: User[] = [
   {
     _id: 'usr_admin',
-    name: 'سعيد جمال',
-    email: 'saeedalraililogistic@gmail.com',
+    name: 'إدارة المنصة',
+    email: 'admin@tedallaly.com',
     role: 'admin',
-    phone: '0566364725',
-    city: 'جدة',
-    isActive: true
-  },
-  {
-    _id: 'usr_salon_ehsan',
-    name: 'إدارة صالون إحسان',
-    email: 'historytime29@gmail.com',
-    role: 'salon_owner',
-    phone: '0566364725',
-    city: 'جدة',
-    linkedProviderId: 'kh77cnn230ayx24dvgm71y5wcx8cpcgz',
-    isActive: true
-  },
-  {
-    _id: 'usr_salon_anamil',
-    name: 'إدارة صالون أنامل ناعمة',
-    email: 'anamil@tedallaly.com',
-    role: 'salon_owner',
-    phone: '0564505943',
-    city: 'جدة',
-    linkedProviderId: 'kh79dwc8bfs0gqzdf605ay17ph8derhw',
-    isActive: true
-  },
-  {
-    _id: 'usr_client',
-    name: 'نورة المنصور',
-    email: 'noura@example.com',
-    role: 'customer',
-    phone: '0566334455',
-    city: 'جدة',
+    phone: '0500000000',
+    city: 'الرياض',
     isActive: true
   }
 ];

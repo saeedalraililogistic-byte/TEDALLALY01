@@ -97,8 +97,18 @@ export const MarketplaceView: React.FC<Props> = ({
   const getCategoryServices = (salonId: string) => {
     return services.filter(srv => {
       const matchesSalon = srv.salonId === salonId;
-      const matchesCat = selectedCategory === 'all' || selectedCategory === 'flash_deals' || srv.categoryId === selectedCategory;
-      return matchesSalon && matchesCat;
+      if (!matchesSalon) return false;
+      if (selectedCategory === 'all' || selectedCategory === 'flash_deals') return true;
+
+      // Smart category matching (matches by ID, category name, or slug)
+      const targetCat = categories.find(c => c._id === selectedCategory);
+      if (srv.categoryId === selectedCategory) return true;
+      if (targetCat) {
+        if (srv.categoryId === targetCat.slug || srv.categoryId === targetCat.name || srv.categoryId === targetCat.nameAr) return true;
+        if (srv.name && targetCat.nameAr && srv.name.includes(targetCat.nameAr)) return true;
+        if (srv.nameAr && targetCat.nameAr && srv.nameAr.includes(targetCat.nameAr)) return true;
+      }
+      return false;
     });
   };
 

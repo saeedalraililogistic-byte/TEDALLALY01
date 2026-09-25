@@ -107,7 +107,7 @@ export const AdminDashboardView: React.FC<Props> = ({
             <div className="flex items-center gap-2">
               <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">لوحة الإدارة والموافقة على الصالونات</h2>
             </div>
-            <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mt-0.5">سعيد جمال • المالك والمشرف العام على الامتثال</p>
+            <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mt-0.5">الإدارة العامة • المشرف على الامتثال وتراخيص الصالونات</p>
           </div>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -934,13 +934,54 @@ export const AdminDashboardView: React.FC<Props> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <div className="flex items-center gap-2">
+                {inspectDocModal.doc.status !== 'approved' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetSalon = salons.find(s => s.salonName === inspectDocModal.salonName);
+                      if (targetSalon) {
+                        if (onUpdateSalonDocumentStatus) {
+                          onUpdateSalonDocumentStatus(targetSalon._id, inspectDocModal.doc.id, 'approved');
+                        } else if (onApproveSalon) {
+                          onApproveSalon(targetSalon._id);
+                        }
+                      }
+                      setInspectDocModal(null);
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-emerald-600/20"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>اعتماد هذه الوثيقة الآن ✓</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetSalon = salons.find(s => s.salonName === inspectDocModal.salonName);
+                    if (targetSalon) {
+                      setRejectionModal({
+                        isOpen: true,
+                        salonId: targetSalon._id,
+                        docId: inspectDocModal.doc.id,
+                        salonName: inspectDocModal.salonName
+                      });
+                    }
+                    setInspectDocModal(null);
+                  }}
+                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  رفض الوثيقة
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setInspectDocModal(null)}
                 className="px-5 py-2.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
-                إغلاق نافذة المعاينة
+                إغلاق
               </button>
             </div>
           </div>

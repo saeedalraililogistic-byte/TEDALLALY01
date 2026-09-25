@@ -63,7 +63,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
     switch (role) {
       case 'admin':
         return {
-          label: 'مدير النظام (سعيد جمال)',
+          label: 'مدير النظام (إدارة المنصة)',
           shortLabel: 'المدير العام',
           icon: <Crown className="w-3.5 h-3.5 text-amber-500" />,
           color: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700/50'
@@ -118,22 +118,31 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
           />
           <div className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-16 sm:top-auto mt-2 sm:w-72 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-[#15151e] border border-rose-200 dark:border-slate-800 rounded-2xl shadow-2xl p-2 z-50 space-y-1 animate-in fade-in-50 zoom-in-95">
             <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-              <span className="font-bold text-slate-800 dark:text-slate-200 block mb-0.5">تبديل الحساب النشط:</span>
-              تخصيص الواجهة والصلاحيات حسب رتبة الحساب المحددة
+              <span className="font-bold text-slate-800 dark:text-slate-200 block mb-0.5">
+                {currentUser.role === 'admin' ? 'تبديل الحساب النشط:' : 'الملف الشخصي والحساب:'}
+              </span>
+              {currentUser.role === 'admin' 
+                ? 'تخصيص الواجهة والصلاحيات حسب رتبة الحساب المحددة' 
+                : `${currentUser.email || currentUser.phone || 'حساب مفعل في منصة تدلّلي'}`}
             </div>
 
+            {/* If admin, allow switching. If regular customer or salon owner, ONLY show their own account */}
             <div className="space-y-1 py-1">
-              {availableUsers.map((user) => {
+              {(currentUser.role === 'admin' ? availableUsers : [currentUser]).map((user) => {
                 const isSelected = user._id === currentUser._id;
                 const badge = getRoleBadge(user.role);
                 return (
-                  <button
+                  <div
                     key={user._id}
                     onClick={() => {
-                      onSwitchUser(user);
-                      setIsOpen(false);
+                      if (currentUser.role === 'admin') {
+                        onSwitchUser(user);
+                        setIsOpen(false);
+                      }
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-right cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-right ${
+                      currentUser.role === 'admin' ? 'cursor-pointer' : 'cursor-default'
+                    } ${
                       isSelected 
                         ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 font-bold' 
                         : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
@@ -149,7 +158,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
                       </div>
                     </div>
                     {isSelected && <Check className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />}
-                  </button>
+                  </div>
                 );
               })}
             </div>

@@ -14,6 +14,7 @@ import {
   syncBookingToFirestore, 
   updateBookingStatusInFirestore, 
   syncServiceToFirestore,
+  syncSalonToFirestore,
   seedInitialDataToFirestore 
 } from './lib/firestoreService.ts';
 import { 
@@ -99,15 +100,96 @@ export default function App() {
       console.error(e);
     }
   }, [salons]);
-  const [services, setServices] = useState(initialServices);
-  const [categories, setCategories] = useState(initialCategories);
-  const [bookings, setBookings] = useState(initialBookings);
-  const [users, setUsers] = useState(initialUsers);
-  // Current logged in user (defaults to admin 'سعيد جمال' or can be null/logged out)
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    // Default to admin Saeed so the user has immediate access to administration, or can switch
-    return initialUsers.find(u => u.role === 'admin') || initialUsers[0];
+  const [services, setServices] = useState<Service[]>(() => {
+    try {
+      const saved = localStorage.getItem('tedallaly_persistent_services');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return initialServices;
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tedallaly_persistent_services', JSON.stringify(services));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [services]);
+
+  const [categories, setCategories] = useState(initialCategories);
+
+  const [bookings, setBookings] = useState<Booking[]>(() => {
+    try {
+      const saved = localStorage.getItem('tedallaly_persistent_bookings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return initialBookings;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tedallaly_persistent_bookings', JSON.stringify(bookings));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [bookings]);
+
+  const [users, setUsers] = useState<User[]>(() => {
+    try {
+      const saved = localStorage.getItem('tedallaly_persistent_users');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return initialUsers;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tedallaly_persistent_users', JSON.stringify(users));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [users]);
+
+  // Current logged in user (defaults to null for visitors so every visitor sees clean guest experience until they sign in)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('tedallaly_logged_in_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed._id) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem('tedallaly_logged_in_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('tedallaly_logged_in_user');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [currentUser]);
 
   // Auth Modal State (Login & Register)
   const [authModal, setAuthModal] = useState<{
@@ -452,6 +534,7 @@ export default function App() {
     };
 
     setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
+    syncSalonToFirestore(updatedSalon);
 
     const isFreelance = targetSalon.providerType === 'freelancer';
 
@@ -473,11 +556,46 @@ export default function App() {
     };
 
     setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
+    syncSalonToFirestore(updatedSalon);
 
     addToast({
       type: 'error',
       title: 'تم إيقاف/رفض الصالون',
       description: `تم إيقاف صالون "${targetSalon.salonName}" وحجبه عن العميلات لحين استيفاء الشروط وتصحيح التراخيص.`
+    });
+  };
+
+  const handleUpdateSalonDocumentStatus = (salonId: string, docId: string, docStatus: 'approved' | 'rejected', reason?: string) => {
+    const targetSalon = salons.find(s => s._id === salonId);
+    if (!targetSalon) return;
+
+    const updatedDocs = (targetSalon.documents || []).map(d => {
+      if (d.id === docId) {
+        return {
+          ...d,
+          status: docStatus,
+          verificationNote: reason
+        };
+      }
+      return d;
+    });
+
+    const allApproved = updatedDocs.length > 0 && updatedDocs.every(d => d.status === 'approved');
+
+    const updatedSalon: Salon = {
+      ...targetSalon,
+      status: allApproved ? 'verified' : (docStatus === 'rejected' ? 'suspended' : targetSalon.status),
+      documents: updatedDocs,
+      approvedAt: allApproved ? new Date().toISOString() : targetSalon.approvedAt
+    };
+
+    setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
+    syncSalonToFirestore(updatedSalon);
+
+    addToast({
+      type: docStatus === 'approved' ? 'success' : 'info',
+      title: docStatus === 'approved' ? 'تم اعتماد المستند بنجاح ✓' : 'تم رفض المستند',
+      description: docStatus === 'approved' ? 'تم تحديث حالة المستند وحفظه سحابياً.' : `تم رفض المستند مع إشعار الصالون: ${reason || ''}`
     });
   };
 
@@ -1023,6 +1141,7 @@ export default function App() {
             bookings={bookings}
             onApproveSalon={handleApproveSalon}
             onRejectSalon={handleRejectSalon}
+            onUpdateSalonDocumentStatus={handleUpdateSalonDocumentStatus}
           />
         )}
 

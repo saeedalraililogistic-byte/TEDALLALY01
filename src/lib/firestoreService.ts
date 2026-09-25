@@ -37,6 +37,20 @@ export async function updateBookingStatusInFirestore(bookingId: string, status: 
   }
 }
 
+// Save or sync a salon to Firestore
+export async function syncSalonToFirestore(salon: Salon): Promise<void> {
+  try {
+    const salonRef = doc(db, 'salons', salon._id);
+    await setDoc(salonRef, {
+      ...salon,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    console.log(`Synced salon ${salon._id} (${salon.salonName}) to Firestore`);
+  } catch (err) {
+    console.error('Failed to sync salon to Firestore:', err);
+  }
+}
+
 // Save or sync a new service to Firestore
 export async function syncServiceToFirestore(service: Service): Promise<void> {
   try {
