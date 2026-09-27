@@ -247,15 +247,286 @@ export const initialServices: Service[] = [
     }))
 ];
 export const initialCategories: Category[] = rawData.categories || [];
-export const initialBookings: Booking[] = (rawData.bookings || []).filter(b => {
-  const serviceName = b.snapshot?.serviceName || '';
-  const totalAmount = b.snapshot?.totalAmount || 0;
-  // Filter out any 1.15 SAR test or cancelled draft bookings and Sara dummy items
-  if (totalAmount <= 5 || serviceName === 'Sara' || serviceName === 'Ceut' || b.status === 'customer_cancelled' || b.status === 'timeout_cancelled') {
-    return false;
+// Realistic sample bookings over the last 30 days for dashboard analytics
+const supplementary30DaysBookings: Booking[] = [
+  {
+    _id: 'bk_sep_01',
+    appointmentDate: '2026-09-03',
+    appointmentTime: '14:30',
+    customerId: 'cust_01',
+    salonId: '-1787048765057',
+    serviceId: 'srv_1',
+    status: 'completed',
+    clientName: 'منى القحطاني',
+    clientPhone: '0551234567',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون لوسيندا',
+      serviceName: 'مكياج سهرة VIP',
+      staffName: 'سارة العتيبي',
+      totalAmount: 350,
+      currency: 'SAR',
+      depositAmount: 100,
+      platformCommission: 35,
+      salonPayoutAmount: 315
+    }
+  },
+  {
+    _id: 'bk_sep_02',
+    appointmentDate: '2026-09-05',
+    appointmentTime: '16:00',
+    customerId: 'cust_02',
+    salonId: '-1787048765057',
+    serviceId: 'srv_2',
+    status: 'completed',
+    clientName: 'نورة الدوسري',
+    clientPhone: '0549876543',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون لوسيندا',
+      serviceName: 'تنظيف بشرة هيدرافيشل',
+      staffName: 'نوف الشمري',
+      totalAmount: 280,
+      currency: 'SAR',
+      depositAmount: 80,
+      platformCommission: 28,
+      salonPayoutAmount: 252
+    }
+  },
+  {
+    _id: 'bk_sep_03',
+    appointmentDate: '2026-09-08',
+    appointmentTime: '18:15',
+    customerId: 'cust_03',
+    salonId: 'salon_ehsan',
+    serviceId: 'srv_3',
+    status: 'customer_cancelled',
+    clientName: 'هند السبيعي',
+    clientPhone: '0533344556',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون إحسان للتزيين النسائي',
+      serviceName: 'قص واستشوار احترافي',
+      staffName: 'منى الراجحي',
+      totalAmount: 180,
+      currency: 'SAR',
+      depositAmount: 50,
+      platformCommission: 18,
+      salonPayoutAmount: 162
+    }
+  },
+  {
+    _id: 'bk_sep_04',
+    appointmentDate: '2026-09-10',
+    appointmentTime: '13:00',
+    customerId: 'cust_04',
+    salonId: '-1787048765057',
+    serviceId: 'srv_4',
+    status: 'completed',
+    clientName: 'لطيفة المطيري',
+    clientPhone: '0567788990',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون لوسيندا',
+      serviceName: 'صبغة وبلياج شعر رويال',
+      staffName: 'سارة العتيبي',
+      totalAmount: 480,
+      currency: 'SAR',
+      depositAmount: 150,
+      platformCommission: 48,
+      salonPayoutAmount: 432
+    }
+  },
+  {
+    _id: 'bk_sep_05',
+    appointmentDate: '2026-09-12',
+    appointmentTime: '15:45',
+    customerId: 'cust_05',
+    salonId: 'salon_anamil',
+    serviceId: 'srv_5',
+    status: 'completed',
+    clientName: 'أريج الحربي',
+    clientPhone: '0501122334',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'أنامل الإبداع للتجميل',
+      serviceName: 'بدكير ومنكير سبا',
+      staffName: 'ريم خالد',
+      totalAmount: 220,
+      currency: 'SAR',
+      depositAmount: 60,
+      platformCommission: 22,
+      salonPayoutAmount: 198
+    }
+  },
+  {
+    _id: 'bk_sep_06',
+    appointmentDate: '2026-09-14',
+    appointmentTime: '17:30',
+    customerId: 'cust_06',
+    salonId: '-1787048765057',
+    serviceId: 'srv_6',
+    status: 'customer_cancelled',
+    clientName: 'شهد التميمي',
+    clientPhone: '0556677889',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون لوسيندا',
+      serviceName: 'معالج بروتين للشعر',
+      staffName: 'نوف الشمري',
+      totalAmount: 420,
+      currency: 'SAR',
+      depositAmount: 120,
+      platformCommission: 42,
+      salonPayoutAmount: 378
+    }
+  },
+  {
+    _id: 'bk_sep_07',
+    appointmentDate: '2026-09-17',
+    appointmentTime: '19:00',
+    customerId: 'cust_07',
+    salonId: 'salon_ehsan',
+    serviceId: 'srv_7',
+    status: 'completed',
+    clientName: 'نجود الزهراني',
+    clientPhone: '0544455667',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون إحسان للتزيين النسائي',
+      serviceName: 'حمام مغربي ملكي بالأعشاب',
+      staffName: 'فاطمة علي',
+      totalAmount: 320,
+      currency: 'SAR',
+      depositAmount: 100,
+      platformCommission: 32,
+      salonPayoutAmount: 288
+    }
+  },
+  {
+    _id: 'bk_sep_08',
+    appointmentDate: '2026-09-19',
+    appointmentTime: '14:00',
+    customerId: 'cust_08',
+    salonId: '-1787048765057',
+    serviceId: 'srv_8',
+    status: 'completed',
+    clientName: 'خلود الشهري',
+    clientPhone: '0533322110',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون لوسيندا',
+      serviceName: 'تركيب رموش دائمة VIP',
+      staffName: 'سارة العتيبي',
+      totalAmount: 260,
+      currency: 'SAR',
+      depositAmount: 80,
+      platformCommission: 26,
+      salonPayoutAmount: 234
+    }
+  },
+  {
+    _id: 'bk_sep_09',
+    appointmentDate: '2026-09-21',
+    appointmentTime: '16:30',
+    customerId: 'cust_09',
+    salonId: 'salon_anamil',
+    serviceId: 'srv_9',
+    status: 'customer_cancelled',
+    clientName: 'ريم الغامدي',
+    clientPhone: '0566677889',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'أنامل الإبداع للتجميل',
+      serviceName: 'مكياج ناعم وتسريحة ويفي',
+      staffName: 'ريم خالد',
+      totalAmount: 310,
+      currency: 'SAR',
+      depositAmount: 90,
+      platformCommission: 31,
+      salonPayoutAmount: 279
+    }
+  },
+  {
+    _id: 'bk_sep_10',
+    appointmentDate: '2026-09-23',
+    appointmentTime: '15:00',
+    customerId: 'cust_10',
+    salonId: '-1787048765057',
+    serviceId: 'srv_10',
+    status: 'completed',
+    clientName: 'بيان العسيري',
+    clientPhone: '0555544332',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون لوسيندا',
+      serviceName: 'جلسة نضارة كولاجين للوجه',
+      staffName: 'نوف الشمري',
+      totalAmount: 290,
+      currency: 'SAR',
+      depositAmount: 90,
+      platformCommission: 29,
+      salonPayoutAmount: 261
+    }
+  },
+  {
+    _id: 'bk_sep_11',
+    appointmentDate: '2026-09-25',
+    appointmentTime: '17:15',
+    customerId: 'cust_11',
+    salonId: '-1787048765057',
+    serviceId: 'srv_11',
+    status: 'completed',
+    clientName: 'دلال الشريف',
+    clientPhone: '0543322119',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون لوسيندا',
+      serviceName: 'مساج استرخائي بالأحجار الساخنة',
+      staffName: 'فاطمة علي',
+      totalAmount: 360,
+      currency: 'SAR',
+      depositAmount: 110,
+      platformCommission: 36,
+      salonPayoutAmount: 324
+    }
+  },
+  {
+    _id: 'bk_sep_12',
+    appointmentDate: '2026-09-26',
+    appointmentTime: '18:45',
+    customerId: 'cust_12',
+    salonId: 'salon_ehsan',
+    serviceId: 'srv_12',
+    status: 'customer_cancelled',
+    clientName: 'عفاف القحطاني',
+    clientPhone: '0509988776',
+    conflictCheckPassed: true,
+    snapshot: {
+      salonName: 'صالون إحسان للتزيين النسائي',
+      serviceName: 'تجهيز عروس ملكي متكامل',
+      staffName: 'سارة العتيبي',
+      totalAmount: 850,
+      currency: 'SAR',
+      depositAmount: 250,
+      platformCommission: 85,
+      salonPayoutAmount: 765
+    }
   }
-  return true;
-});
+];
+
+export const initialBookings: Booking[] = [
+  ...((rawData.bookings || []).filter(b => {
+    const serviceName = b.snapshot?.serviceName || '';
+    const totalAmount = b.snapshot?.totalAmount || 0;
+    // Filter out 1.15 SAR test bookings or dummy Sara/Ceut items
+    if (totalAmount <= 5 || serviceName === 'Sara' || serviceName === 'Ceut') {
+      return false;
+    }
+    return true;
+  })),
+  ...supplementary30DaysBookings
+];
 
 export const initialUsers: User[] = [
   {
