@@ -78,7 +78,7 @@ export const TAP_CONFIG = {
   targetDomain: 'https://tedallaly.com/ar',
   defaultCurrency: 'SAR' as const,
   apiUrl: 'https://api.tap.company/v2',
-  publicKey: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TAP_PUBLIC_KEY) || 'pk_test_68071827_tedallaly',
+  publicKey: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TAP_PUBLIC_KEY) || 'pk_live_icUaSZ5knBHG9FgEW1q7vwMptCuzI',
 };
 
 /**
