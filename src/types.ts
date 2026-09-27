@@ -27,11 +27,14 @@ export interface Salon {
   totalBookings?: number;
   isActive: boolean;
   ownerId?: string;
+  ownerEmail?: string;
+  ownerName?: string;
   providerType?: 'salon' | 'freelancer'; // 'salon' = صالون تجاري, 'freelancer' = ميكب آرتست / خبيرة مستقلة
   freelanceDocumentNumber?: string; // وثيقة العمل الحر
   acceptsOnlinePayment?: boolean;
   commercialRegisterNumber?: string;
   taxNumber?: string;
+  vatNumber?: string;
   documents?: SalonDocument[];
   verificationNotes?: string;
   submittedAt?: string;
@@ -44,6 +47,7 @@ export interface Service {
   categoryId?: string;
   name: string;
   nameAr?: string;
+  description?: string;
   price: number;
   currency: string;
   durationMins: number;
@@ -76,6 +80,7 @@ export interface Booking {
   clientName?: string;
   clientPhone?: string;
   conflictCheckPassed?: boolean;
+  paymentMethod?: 'electronic' | 'smart_deposit' | 'on_arrival' | string;
   notes?: string;
   snapshot?: {
     salonName?: string;
@@ -279,17 +284,28 @@ export type NotificationType =
   | 'appointment_reminder' 
   | 'status_change' 
   | 'booking_confirmed' 
-  | 'booking_cancelled';
+  | 'booking_cancelled'
+  | 'salon_approved'
+  | 'salon_rejected'
+  | 'document_approved'
+  | 'document_rejected'
+  | 'salon_registered_pending'
+  | 'documents_uploaded'
+  | 'new_booking_received';
 
 export interface InAppNotification {
   id: string;
-  bookingId: string;
+  bookingId?: string;
+  salonId?: string;
+  recipientRole?: 'all' | 'customer' | 'salon_owner' | 'freelancer' | 'admin';
+  recipientId?: string; // target user id or salon id
   type: NotificationType;
   title: string;
   message: string;
   timestamp: number;
   read: boolean;
   urgency: 'high' | 'normal' | 'low';
+  rejectionReason?: string;
   bookingSnapshot?: {
     salonName?: string;
     serviceName?: string;
@@ -299,5 +315,12 @@ export interface InAppNotification {
     totalAmount?: number;
     staffName?: string;
     clientName?: string;
+  };
+  salonSnapshot?: {
+    salonName?: string;
+    providerType?: 'salon' | 'freelancer';
+    city?: string;
+    documentTitle?: string;
+    status?: string;
   };
 }

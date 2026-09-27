@@ -20,9 +20,10 @@ import { Salon, SalonDocument } from '../../types.ts';
 interface Props {
   salon: Salon;
   onUpdateSalon?: (updated: Salon) => void;
+  onSimulateApproval?: () => void;
 }
 
-export const SalonVerificationSection: React.FC<Props> = ({ salon, onUpdateSalon }) => {
+export const SalonVerificationSection: React.FC<Props> = ({ salon, onUpdateSalon, onSimulateApproval }) => {
   const [crNumber, setCrNumber] = useState(salon.commercialRegisterNumber || '');
   const [taxNumber, setTaxNumber] = useState(salon.taxNumber || '');
   const [selectedDocType, setSelectedDocType] = useState<SalonDocument['type']>('commercial_register');

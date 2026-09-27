@@ -22,7 +22,8 @@ import {
   X,
   Download,
   Receipt,
-  BadgeDollarSign
+  BadgeDollarSign,
+  Bell
 } from 'lucide-react';
 import { Salon, Booking, SalonDocument } from '../types.ts';
 import { TedallalyLogo } from './TedallalyLogo.tsx';
@@ -35,6 +36,7 @@ interface Props {
   onApproveSalon?: (salonId: string) => void;
   onRejectSalon?: (salonId: string, reason?: string) => void;
   onUpdateSalonDocumentStatus?: (salonId: string, docId: string, status: 'approved' | 'rejected', reason?: string) => void;
+  onSimulateAdminDocsNotification?: () => void;
 }
 
 export const AdminDashboardView: React.FC<Props> = ({ 
@@ -42,7 +44,8 @@ export const AdminDashboardView: React.FC<Props> = ({
   bookings,
   onApproveSalon,
   onRejectSalon,
-  onUpdateSalonDocumentStatus
+  onUpdateSalonDocumentStatus,
+  onSimulateAdminDocsNotification
 }) => {
   const [selectedTab, setSelectedTab] = useState<'overview' | 'verifications' | 'salons' | 'tap_gateway'>('verifications');
   const [selectedTapPlan, setSelectedTapPlan] = useState<'starter' | 'standard' | 'advanced'>('starter');
@@ -116,6 +119,37 @@ export const AdminDashboardView: React.FC<Props> = ({
             بوابة اعتماد التراخيص والسجلات
           </span>
         </div>
+      </div>
+
+      {/* Real-time Notification Banner for Admin */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950/80 to-slate-900 text-white rounded-2xl p-3.5 sm:p-4 border border-indigo-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center shrink-0 shadow-inner">
+            <Bell className="w-4 h-4 text-indigo-400 animate-pulse" />
+          </div>
+          <div>
+            <div className="text-xs font-black flex items-center gap-2">
+              <span>نظام إشعارات الإدارة الفوري (Admin Real-Time Alerts)</span>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+                متصل بـ Firebase لحظياً ✓
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300 mt-0.5">
+              تصلكِ تنبيهات فورية مع نغمة صوتية فور قيام أي صالون أو خبيرة برفع مستندات وسجلات جديدة للمراجعة والتدقيق.
+            </p>
+          </div>
+        </div>
+
+        {onSimulateAdminDocsNotification && (
+          <button
+            onClick={onSimulateAdminDocsNotification}
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-600/30 active:scale-95 shrink-0"
+            title="محاكاة وصول إشعار فوري بأن صالوناً جديداً رفع أوراقه للمراجعة"
+          >
+            <FileCheck className="w-4 h-4" />
+            <span>تجربة وصول إشعار صالون جديد للإدارة 🏢</span>
+          </button>
+        )}
       </div>
 
       {/* Main Stats Grid - Clickable to instantly filter */}
@@ -581,20 +615,28 @@ export const AdminDashboardView: React.FC<Props> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
                 <span className="text-slate-400 text-[11px] block">Merchant ID (معرف التاجر):</span>
-                <span className="font-mono text-emerald-400 font-bold text-sm block">68071827</span>
-                <span className="text-[10px] text-slate-500">مطابق للوحة تحكم TapOS</span>
+                <span className="font-mono text-emerald-400 font-bold text-sm block">{TAP_CONFIG.merchantId}</span>
+                <span className="text-[10px] text-slate-500">مطابق للوحة تحكم TapOS ({TAP_CONFIG.merchantNameAr})</span>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
-                <span className="text-slate-400 text-[11px] block">المفتاح المطلوب في الواجهة (Public Key):</span>
-                <span className="font-mono text-blue-400 font-bold text-xs block truncate">pk_live_... أو pk_test_...</span>
-                <span className="text-[10px] text-emerald-400">هو المفتاح الوحيد المصرح بوضعه في المتصفح</span>
+                <span className="text-slate-400 text-[11px] block">المفتاح العام (Public Key):</span>
+                <span className="font-mono text-blue-400 font-bold text-xs block truncate">
+                  {TAP_CONFIG.publicKey ? `${TAP_CONFIG.publicKey.substring(0, 10)}...${TAP_CONFIG.publicKey.slice(-4)}` : 'لم يتم الضبط'}
+                </span>
+                <span className={`text-[10px] font-bold flex items-center gap-1 ${TAP_CONFIG.publicKey.startsWith('pk_live_') ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {TAP_CONFIG.publicKey.startsWith('pk_live_') ? '🟢 مفتاح إنتاج حي حقيقي مفعّل (Live)' : '🟡 وضع تجريبي (Test Mode)'}
+                </span>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
-                <span className="text-slate-400 text-[11px] block">المفتاح السري (Secret Key):</span>
-                <span className="font-mono text-amber-400 font-bold text-xs block truncate">sk_live_... أو sk_test_...</span>
-                <span className="text-[10px] text-rose-400 font-bold">سري للباك إند والسيرفر فقط (Webhook)</span>
+                <span className="text-slate-400 text-[11px] block">حالة بوابة الدفع (Gateway Mode):</span>
+                <span className="font-mono text-emerald-400 font-bold text-xs block truncate">
+                  {TAP_CONFIG.publicKey.startsWith('pk_live_') ? 'LIVE_PRODUCTION' : 'TEST_SANDBOX'}
+                </span>
+                <span className="text-[10px] text-emerald-400 font-bold">
+                  {TAP_CONFIG.publicKey.startsWith('pk_live_') ? '✅ جاهز لتحصيل مدفوعات العميلات الحقيقية' : 'بيئة تجارب واختبار'}
+                </span>
               </div>
             </div>
 

@@ -2,26 +2,68 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Test collection for initial connectivity test
+    // Global Safety Net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'saeedalraililogistic@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Test collection for SDK connection verification
     match /test/{docId} {
       allow read, write: if true;
     }
 
-    // Salons catalog: publicly readable for marketplace, writable for management
+    // User accounts collection: requires authenticated user
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Salons catalog: publicly readable for marketplace browsing, protected writes
     match /salons/{salonId} {
       allow read: if true;
-      allow write: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
-    // Services catalog: publicly readable for marketplace, writable by salon
+    // Services catalog: publicly readable for marketplace browsing, protected writes
     match /services/{serviceId} {
       allow read: if true;
-      allow write: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
-    // Bookings: readable and creatable by customers and salon
+    // Bookings: customers can create bookings; reading and updating requires authentication
     match /bookings/{bookingId} {
-      allow read, create, update: if true;
+      allow create: if true;
+      allow read, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Notifications: persistent notifications; creation allowed; reading/managing requires auth
+    match /notifications/{notificationId} {
+      allow create: if true;
+      allow read, update, delete: if isSignedIn();
     }
   }
 }

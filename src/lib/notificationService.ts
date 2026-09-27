@@ -1,7 +1,208 @@
-import { Booking, InAppNotification } from '../types.ts';
+import { Booking, InAppNotification, Salon } from '../types.ts';
 
-const STORAGE_KEY = 'tedallaly_in_app_notifications_v1';
-const REMINDED_KEY = 'tedallaly_reminded_booking_ids_v1';
+const STORAGE_KEY = 'tedallaly_in_app_notifications_v2';
+const REMINDED_KEY = 'tedallaly_reminded_booking_ids_v2';
+
+/**
+ * Creates an instant notification dispatched to Platform Admin when a new salon/freelancer registers and uploads documents.
+ */
+export function createSalonRegistrationAdminNotification(salon: Salon): InAppNotification {
+  const isFreelance = salon.providerType === 'freelancer';
+  const docsCount = salon.documents?.length || 0;
+  const docNames = salon.documents?.map(d => d.title).join('، ') || 'المستندات الرسمية';
+
+  return {
+    id: `notif_admin_new_salon_${salon._id}_${Date.now()}`,
+    salonId: salon._id,
+    type: 'salon_registered_pending',
+    recipientRole: 'admin',
+    title: isFreelance 
+      ? `📋 خبيرة مستقلة جديدة بانتظار الاعتماد والمراجعة: ${salon.salonName}`
+      : `📋 صالون جديد رفع أوراقه وبانتظار الاعتماد والمراجعة: ${salon.salonName}`,
+    message: `قام ${isFreelance ? 'الخبيرة المستقلة' : 'صالون'} "${salon.salonName}" في ${salon.city} برفع مستنداته القانونية (${docNames}). يتطلب طلب الانضمام مراجعة وتدقيق المستندات والموافقة عليها.`,
+    timestamp: Date.now(),
+    read: false,
+    urgency: 'high',
+    salonSnapshot: {
+      salonName: salon.salonName,
+      providerType: salon.providerType,
+      city: salon.city,
+      documentTitle: docNames,
+      status: 'pending_verification'
+    }
+  };
+}
+
+/**
+ * Creates an instant notification to Admin when an existing salon re-uploads/updates documents for review.
+ */
+export function createSalonDocumentsReuploadedAdminNotification(salon: Salon, updatedDocTitle?: string): InAppNotification {
+  return {
+    id: `notif_admin_docs_update_${salon._id}_${Date.now()}`,
+    salonId: salon._id,
+    type: 'documents_uploaded',
+    recipientRole: 'admin',
+    title: `🔄 تحديث مستندات بانتظار التدقيق: صالون ${salon.salonName}`,
+    message: `قام صالون "${salon.salonName}" برفع/تحديث ${updatedDocTitle || 'المستندات القانونية'} لإعادة التدقيق ورفع التعليق. يرجى المراجعة والاعتماد.`,
+    timestamp: Date.now(),
+    read: false,
+    urgency: 'high',
+    salonSnapshot: {
+      salonName: salon.salonName,
+      providerType: salon.providerType,
+      city: salon.city,
+      documentTitle: updatedDocTitle,
+      status: 'pending_verification'
+    }
+  };
+}
+
+/**
+ * Creates a notification when an individual legal document is approved.
+ */
+export function createDocumentApprovedNotification(salon: Salon, docTitle: string): InAppNotification {
+  return {
+    id: `notif_doc_appr_${salon._id}_${Date.now()}`,
+    salonId: salon._id,
+    type: 'document_approved',
+    recipientRole: salon.providerType === 'freelancer' ? 'freelancer' : 'salon_owner',
+    recipientId: salon.ownerId || salon._id,
+    title: `✓ تم اعتماد وثيقة: ${docTitle}`,
+    message: `تم تدقيق واعتماد وثيقة "${docTitle}" لصالون ${salon.salonName} بنجاح من قبل إدارة منصة تدلّلي.`,
+    timestamp: Date.now(),
+    read: false,
+    urgency: 'normal',
+    salonSnapshot: {
+      salonName: salon.salonName,
+      providerType: salon.providerType,
+      documentTitle: docTitle,
+      status: 'approved'
+    }
+  };
+}
+
+/**
+ * Creates an instant notification dispatched to the Salon Owner when a client books an appointment.
+ */
+export function createNewBookingSalonNotification(booking: Booking, salon: Salon): InAppNotification {
+  const serviceName = booking.snapshot?.serviceName || 'خدمة تجميلية';
+  const clientName = booking.clientName || 'عميلة جديدة';
+  const totalAmount = booking.snapshot?.totalAmount || 0;
+
+  return {
+    id: `notif_salon_bkg_${booking._id}_${Date.now()}`,
+    salonId: salon._id,
+    bookingId: booking._id,
+    type: 'new_booking_received',
+    recipientRole: salon.providerType === 'freelancer' ? 'freelancer' : 'salon_owner',
+    recipientId: salon.ownerId || salon._id,
+    title: `📅 حجز جديد مؤكد في صالونكِ!`,
+    message: `تم حجز موعد جديد لخدمة "${serviceName}" من قبل العميلة ${clientName} بتاريخ ${booking.appointmentDate} الساعة ${booking.appointmentTime}. الإجمالي: ${totalAmount} SAR. تم تأمين الكرسي بنجاح ضد أي تضارب.`,
+    timestamp: Date.now(),
+    read: false,
+    urgency: 'high',
+    bookingSnapshot: {
+      salonName: salon.salonName,
+      serviceName,
+      appointmentDate: booking.appointmentDate,
+      appointmentTime: booking.appointmentTime,
+      status: booking.status,
+      totalAmount,
+      staffName: booking.snapshot?.staffName,
+      clientName
+    }
+  };
+}
+
+/**
+ * Creates a real notification when a salon or freelancer profile is approved.
+ */
+export function createSalonApprovalNotification(salon: Salon): InAppNotification {
+  const isFreelance = salon.providerType === 'freelancer';
+  const title = isFreelance 
+    ? `تم اعتماد ملفكِ كخبيرة تجميل مستقلة بنجاح! 🛡️`
+    : `تم اعتماد صالون "${salon.salonName}" رسمياً ✓`;
+  
+  const message = isFreelance
+    ? `تهانينا! تمت مراجعة وثيقة العمل الحر الخاصة بكِ والموافقة على حسابكِ. خدماتكِ التجميلية تظهر الآن لجميع العميلات في ${salon.city} مع إمكانية استقبال الحجوزات والدفع الإلكتروني.`
+    : `تهانينا! تمت مراجعة السجلات والتراخيص لـ "${salon.salonName}" بنجاح. ملف الصالون نشط ومعتمد رسمياً في منصة تدلّلي وتستطيع العميلات الحجز فوراً.`;
+
+  return {
+    id: `notif_salon_appr_${salon._id}_${Date.now()}`,
+    salonId: salon._id,
+    type: 'salon_approved',
+    recipientRole: isFreelance ? 'freelancer' : 'salon_owner',
+    recipientId: salon.ownerId || salon._id,
+    title,
+    message,
+    timestamp: Date.now(),
+    read: false,
+    urgency: 'high',
+    salonSnapshot: {
+      salonName: salon.salonName,
+      providerType: salon.providerType,
+      city: salon.city,
+      status: 'verified'
+    }
+  };
+}
+
+/**
+ * Creates a real notification when a salon is rejected or suspended with exact reason.
+ */
+export function createSalonRejectionNotification(salon: Salon, reason: string): InAppNotification {
+  const isFreelance = salon.providerType === 'freelancer';
+  const title = isFreelance
+    ? `تنبيه: مطلوب مراجعة وتصحيح وثيقة العمل الحر ⚠️`
+    : `تم تعليق اعتماد صالون "${salon.salonName}" مؤقتاً ⚠️`;
+
+  const message = `نود إفادتكم بقرار إدارة الامتثال بخصوص ${isFreelance ? 'ملف العمل الحر' : 'طلب اعتماد الصالون'}: ${reason}. يرجى الدخول للوحة التحكم ورفع المستندات المطلوبة لإعادة التفعيل.`;
+
+  return {
+    id: `notif_salon_rej_${salon._id}_${Date.now()}`,
+    salonId: salon._id,
+    type: 'salon_rejected',
+    recipientRole: isFreelance ? 'freelancer' : 'salon_owner',
+    recipientId: salon.ownerId || salon._id,
+    title,
+    message,
+    timestamp: Date.now(),
+    read: false,
+    urgency: 'high',
+    rejectionReason: reason,
+    salonSnapshot: {
+      salonName: salon.salonName,
+      providerType: salon.providerType,
+      city: salon.city,
+      status: 'suspended'
+    }
+  };
+}
+
+/**
+ * Creates a notification when an individual legal document is rejected.
+ */
+export function createDocumentRejectionNotification(salon: Salon, docTitle: string, reason: string): InAppNotification {
+  return {
+    id: `notif_doc_rej_${salon._id}_${Date.now()}`,
+    salonId: salon._id,
+    type: 'document_rejected',
+    recipientRole: salon.providerType === 'freelancer' ? 'freelancer' : 'salon_owner',
+    recipientId: salon.ownerId || salon._id,
+    title: `مطلوب تصحيح مستند: ${docTitle} ⚠️`,
+    message: `تم رفض وثيقة "${docTitle}" لصالون ${salon.salonName}. السبب: ${reason}. يرجى إرفاق نسخة سارية ومحدثة من منصة بلدي أو العمل الحر.`,
+    timestamp: Date.now(),
+    read: false,
+    urgency: 'high',
+    rejectionReason: reason,
+    salonSnapshot: {
+      salonName: salon.salonName,
+      providerType: salon.providerType,
+      documentTitle: docTitle,
+      status: 'rejected'
+    }
+  };
+}
 
 /**
  * Parses appointment date and time into a Date object.
@@ -211,51 +412,8 @@ export function getStoredNotifications(): InAppNotification[] {
     console.error('Failed to parse stored notifications:', e);
   }
 
-  // Initial seed notifications so the user has immediate visual feedback
-  const initialSeeds: InAppNotification[] = [
-    {
-      id: 'notif_seed_1',
-      bookingId: 'book_sample_1',
-      type: 'appointment_reminder',
-      title: 'تذكير: اقتراب موعد حجزكِ ⏰ (اليوم)',
-      message: 'موعدكِ لخدمة "مكياج سهرة ناعم + رموش" لدى ميزون دو سوان اليوم في تمام الساعة 5:00 م. يرجى الحضور قبل الموعد بـ 10 دقائق.',
-      timestamp: Date.now() - 1000 * 60 * 15, // 15 mins ago
-      read: false,
-      urgency: 'high',
-      bookingSnapshot: {
-        salonName: 'ميزون دو سوان - فرع التحلية',
-        serviceName: 'مكياج سهرة ناعم + رموش',
-        appointmentDate: new Date().toISOString().split('T')[0],
-        appointmentTime: '17:00',
-        status: 'confirmed',
-        totalAmount: 350,
-        staffName: 'ريم الدوسري',
-        clientName: 'سارة خالد',
-      },
-    },
-    {
-      id: 'notif_seed_2',
-      bookingId: 'book_sample_2',
-      type: 'booking_confirmed',
-      title: 'تم تأكيد موعدكِ من قبل الصالون! ✨',
-      message: 'قام صالون لوزا بيوتي لاونج بتأكيد موعدكِ لخدمة "بدكير وسبا أظافر VIP". الموعد مؤمن بالكامل وخالٍ من أي تعارض.',
-      timestamp: Date.now() - 1000 * 60 * 60 * 2, // 2 hours ago
-      read: false,
-      urgency: 'normal',
-      bookingSnapshot: {
-        salonName: 'صالون لوزا بيوتي لاونج',
-        serviceName: 'بدكير وسبا أظافر VIP',
-        appointmentDate: new Date().toISOString().split('T')[0],
-        appointmentTime: '14:30',
-        status: 'confirmed',
-        totalAmount: 180,
-        staffName: 'نورة القحطاني',
-        clientName: 'نوف المحمد',
-      },
-    }
-  ];
-
-  return initialSeeds;
+  // No fake or mock notifications - only real operational notifications created by actions
+  return [];
 }
 
 export function saveStoredNotifications(notifications: InAppNotification[]): void {

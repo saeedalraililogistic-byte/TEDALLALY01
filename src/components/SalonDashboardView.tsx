@@ -69,10 +69,12 @@ import { ExternalGlamDispatcher } from './salon/ExternalGlamDispatcher.tsx';
 import { VisualConsultationLookbook } from './salon/VisualConsultationLookbook.tsx';
 import { UnifiedBookingCalendarManager } from './salon/UnifiedBookingCalendarManager.tsx';
 import { SalonVerificationSection } from './salon/SalonVerificationSection.tsx';
+import { exportBookingsToCSV } from '../lib/exportCsvService.ts';
 
 interface Props {
   salon: Salon;
   allSalons?: Salon[];
+  isPlatformAdmin?: boolean;
   onSelectSalon?: (salonId: string) => void;
   services: Service[];
   bookings: Booking[];
@@ -84,11 +86,15 @@ interface Props {
   flashOffers?: FlashOffer[];
   onAddFlashOffer?: (offer: FlashOffer) => void;
   onDeleteFlashOffer?: (id: string) => void;
+  onSimulateSalonApprovalNotification?: () => void;
+  onSimulateSalonRejectionNotification?: () => void;
+  onSimulateAdminDocsNotification?: () => void;
 }
 
 export const SalonDashboardView: React.FC<Props> = ({
   salon,
   allSalons,
+  isPlatformAdmin,
   onSelectSalon,
   services,
   bookings,
@@ -100,6 +106,9 @@ export const SalonDashboardView: React.FC<Props> = ({
   flashOffers,
   onAddFlashOffer,
   onDeleteFlashOffer,
+  onSimulateSalonApprovalNotification,
+  onSimulateSalonRejectionNotification,
+  onSimulateAdminDocsNotification,
 }) => {
   const [activeMenu, setActiveMenu] = useState('نظرة عامة');
   const [copied, setCopied] = useState(false);
@@ -175,6 +184,28 @@ export const SalonDashboardView: React.FC<Props> = ({
     navigator.clipboard.writeText(`https://tedallaly.com/ar/salons/-1787048765057`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleExportDailyBookings = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const result = exportBookingsToCSV(salonBookings, salon.salonName, {
+      targetDate: todayStr,
+      filePrefix: 'حجوزات_اليوم'
+    });
+
+    if (result.success) {
+      setFlashSuccessToast(`تم تصدير ${result.count} حجز لتاريخ اليوم (${todayStr}) إلى ملف CSV (${result.filename}) بنجاح! 📁`);
+    } else {
+      if (salonBookings.length > 0) {
+        const allResult = exportBookingsToCSV(salonBookings, salon.salonName, {
+          filePrefix: 'ارشيف_حجوزات_شامل'
+        });
+        setFlashSuccessToast(`لا توجد مواعيد اليوم (${todayStr})، لذا تم تصدير أرشيف الحجوزات الكامل (${allResult.count} حجز) إلى ملف CSV بنجاح! 📁`);
+      } else {
+        setFlashSuccessToast('لا توجد أي حجوزات مسجلة في الصالون حالياً لتصديرها.');
+      }
+    }
+    setTimeout(() => setFlashSuccessToast(null), 5000);
   };
 
   const handleCreateService = (e: React.FormEvent) => {
@@ -306,20 +337,41 @@ export const SalonDashboardView: React.FC<Props> = ({
         </div>
 
         {salon.status !== 'verified' && (
-          <div className="w-full sm:w-auto p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0" />
-              <span>
-                {salon.status === 'pending_verification'
-                  ? 'المستندات مرفوعة وقيد المراجعة الإدارية. الحجوزات معلقة مؤقتاً لحين الاعتماد.'
-                  : 'يلزم رفع السجل التجاري ورخصة البلدية من تبويب "الاتفاقية والتحقق" لتفعيل الصالون.'}
-              </span>
+          <div className={`w-full sm:w-auto p-3.5 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            salon.status === 'suspended'
+              ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200'
+          }`}>
+            <div className="flex items-start gap-2.5">
+              {salon.status === 'suspended' ? (
+                <ShieldAlert className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+              ) : (
+                <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              )}
+              <div className="space-y-0.5">
+                <span className="font-bold block">
+                  {salon.status === 'suspended'
+                    ? 'تم تعليق/رفض الاعتماد من الإدارة لحين تصحيح المستندات'
+                    : salon.status === 'pending_verification'
+                    ? 'المستندات مرفوعة وقيد المراجعة الإدارية. الحجوزات معلقة مؤقتاً لحين الاعتماد.'
+                    : 'يلزم رفع السجل التجاري ورخصة البلدية من تبويب "الاتفاقية والتحقق" لتفعيل الصالون.'}
+                </span>
+                {salon.verificationNotes && (
+                  <p className="text-[11px] text-rose-700 dark:text-rose-300 font-semibold bg-white/70 dark:bg-slate-900/60 p-1.5 rounded-lg border border-rose-200 dark:border-rose-900/50">
+                    سبب قرار المشرف: {salon.verificationNotes}
+                  </p>
+                )}
+              </div>
             </div>
             <button
               onClick={() => setActiveMenu('الاتفاقية والتحقق')}
-              className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold rounded-lg text-[11px] shrink-0 transition-colors"
+              className={`px-3 py-1.5 font-bold rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer ${
+                salon.status === 'suspended'
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                  : 'bg-amber-500 hover:bg-amber-600 text-slate-900'
+              }`}
             >
-              مراجعة المستندات
+              تصحيح ورفع المستندات
             </button>
           </div>
         )}
@@ -327,7 +379,9 @@ export const SalonDashboardView: React.FC<Props> = ({
         <div className="flex items-center gap-2">
           {allSalons && onSelectSalon && allSalons.length > 1 && (
             <div className="flex items-center gap-1.5 bg-rose-50/70 dark:bg-slate-900 border border-rose-200 dark:border-slate-800 rounded-xl px-2.5 py-1 text-xs">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">تبديل الصالون:</span>
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                {isPlatformAdmin ? 'معاينة كإدارة: تبديل الصالون:' : 'تبديل فروع صالوني:'}
+              </span>
               <select
                 value={salon._id}
                 onChange={e => onSelectSalon(e.target.value)}
@@ -351,15 +405,103 @@ export const SalonDashboardView: React.FC<Props> = ({
             </button>
           )}
 
+          {/* Quick Daily Bookings CSV Export */}
+          <button
+            onClick={handleExportDailyBookings}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+            title="تصدير حجوزات اليوم إلى ملف CSV لحفظ أرشيف العمليات"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>تصدير الحجوزات (CSV)</span>
+          </button>
+
           <button
             onClick={handleCopyLink}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-rose-200 dark:border-slate-700/80 rounded-xl text-xs font-bold transition-all shadow-xs"
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-rose-200 dark:border-slate-700/80 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-rose-500" />}
             <span>{copied ? 'تم النسخ!' : 'نسخ رابط الصالون'}</span>
           </button>
         </div>
       </div>
+
+      {/* Real-time Notification Verification Simulator Bar */}
+      <div className="bg-gradient-to-r from-slate-900 via-purple-950/70 to-slate-900 text-white rounded-2xl p-3.5 sm:p-4 border border-rose-500/20 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center shrink-0 shadow-inner">
+            <Bell className="w-4 h-4 animate-bounce" />
+          </div>
+          <div>
+            <div className="text-xs font-black flex items-center gap-2">
+              <span>نظام التنبيهات اللحظية المباشرة (Instant Notification Center)</span>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+                Firebase Firestore نشط ✓
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300 mt-0.5">
+              تصل التنبيهات فورياً وبنغمة صوتية عند قبول واعتماد الصالون أو رفضه، أو عند رفع وثائق جديدة للإدارة:
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0 text-xs">
+          {onSimulateSalonApprovalNotification && (
+            <button
+              onClick={onSimulateSalonApprovalNotification}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              title="محاكاة وصول إشعار فوري بأن إدارة تدلّلي وافقت واعتمدت هذا الصالون"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>تجربة إشعار الاعتماد الفوري ✓</span>
+            </button>
+          )}
+
+          {onSimulateSalonRejectionNotification && (
+            <button
+              onClick={onSimulateSalonRejectionNotification}
+              className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              title="محاكاة وصول إشعار فوري للصالون برفض أو تعليق الاعتماد مع توثيق السبب"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>تجربة إشعار الرفض مع السبب ⚠️</span>
+            </button>
+          )}
+
+          {onSimulateAdminDocsNotification && (
+            <button
+              onClick={onSimulateAdminDocsNotification}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              title="محاكاة وصول إشعار فوري لإدارة المنصة بأن الصالون رفع وثائق جديدة للمراجعة"
+            >
+              <FileCheck className="w-3.5 h-3.5" />
+              <span>إشعار للإدارة برفع أوراق 🏢</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {salon.status === 'verified' && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <span className="font-bold text-emerald-900 dark:text-emerald-200 block text-sm">
+                صالونكِ معتمد ومفعّل رسمياً في منصة تدلّلي 🛡️✓
+              </span>
+              <p className="text-emerald-700 dark:text-emerald-300 text-[11px] mt-0.5">
+                تم تدقيق ومطابقة السجل التجاري ورخصة البلدية والحساب البنكي. صالونك متاح للعميلات ويمكنك استقبال الحجوزات وإدارة كل العمليات مجاناً.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="px-3 py-1 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs">
+              الصالون نشط ومعتمد 100%
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Mobile / Tablet Responsive Tool Selector Bar (Prominent & Always Accessible) */}
       <div className="lg:hidden bg-white dark:bg-[#121218] border-2 border-rose-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm space-y-3">
@@ -664,13 +806,23 @@ export const SalonDashboardView: React.FC<Props> = ({
 
                   <div className="mt-4 pt-3 border-t border-sky-100/60 dark:border-slate-800/60 flex items-center justify-between text-xs">
                     <span className="text-[11px] text-slate-500 dark:text-slate-400">0 إلغاءات مسجلة</span>
-                    <button
-                      onClick={() => setActiveMenu('الحجوزات')}
-                      className="font-bold text-sky-600 dark:text-sky-400 hover:underline flex items-center gap-1 group-hover:translate-x-[-2px] transition-transform"
-                    >
-                      <span>عرض الجدول الكامل</span>
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleExportDailyBookings}
+                        title="تصدير حجوزات اليوم إلى ملف CSV لحفظ الأرشيف"
+                        className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>تصدير CSV</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveMenu('الحجوزات')}
+                        className="font-bold text-sky-600 dark:text-sky-400 hover:underline flex items-center gap-1 group-hover:translate-x-[-2px] transition-transform cursor-pointer"
+                      >
+                        <span>الجدول الكامل</span>
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 

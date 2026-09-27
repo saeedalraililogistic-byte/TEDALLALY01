@@ -26,8 +26,12 @@ import {
   Sparkles,
   RefreshCw,
   Sliders,
-  DollarSign
+  DollarSign,
+  Download,
+  FileSpreadsheet,
+  Archive
 } from 'lucide-react';
+import { exportBookingsToCSV } from '../../lib/exportCsvService.ts';
 
 interface Props {
   salon: Salon;
@@ -48,6 +52,7 @@ export const UnifiedBookingCalendarManager: React.FC<Props> = ({
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedStaffFilter, setSelectedStaffFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   // Salon Capacity & Auto-Dispatcher Settings
   const [capacitySettings, setCapacitySettings] = useState({
@@ -251,6 +256,45 @@ export const UnifiedBookingCalendarManager: React.FC<Props> = ({
     onAddBooking(testBooking);
   };
 
+  const handleExportDailyCsv = () => {
+    const result = exportBookingsToCSV(salonBookings, salon.salonName, {
+      targetDate: selectedDate,
+      filePrefix: 'حجوزات_يومية'
+    });
+
+    if (result.success) {
+      setExportNotice(`تم تصدير ${result.count} حجز ليوم (${selectedDate}) إلى ملف CSV (${result.filename}) بنجاح! 📁`);
+    } else {
+      if (salonBookings.length > 0) {
+        const allResult = exportBookingsToCSV(salonBookings, salon.salonName, {
+          filePrefix: 'ارشيف_حجوزات_شامل'
+        });
+        setExportNotice(`لا توجد مواعيد مسجلة ليوم ${selectedDate}، لذا تم تصدير أرشيف الحجوزات الكامل (${allResult.count} حجز) إلى ملف CSV بنجاح! 📁`);
+      } else {
+        setExportNotice('لا توجد أي حجوزات مسجلة في الصالون حالياً لتصديرها.');
+      }
+    }
+
+    setTimeout(() => setExportNotice(null), 5000);
+  };
+
+  const handleExportAllArchiveCsv = () => {
+    if (salonBookings.length === 0) {
+      setExportNotice('لا توجد أي حجوزات مسجلة في الصالون حالياً لتصديرها.');
+      setTimeout(() => setExportNotice(null), 4000);
+      return;
+    }
+
+    const result = exportBookingsToCSV(salonBookings, salon.salonName, {
+      filePrefix: 'ارشيف_عمليات_الصالون'
+    });
+
+    if (result.success) {
+      setExportNotice(`تم تصدير الأرشيف الشامل لجميع حجوزات الصالون (${result.count} حجز) إلى ملف CSV (${result.filename}) بنجاح! 📁`);
+    }
+    setTimeout(() => setExportNotice(null), 5000);
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* 100% Conflict Shield Status Banner */}
@@ -382,16 +426,58 @@ export const UnifiedBookingCalendarManager: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* Date Selector */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)}
-            className="bg-rose-50/50 dark:bg-slate-950 border border-rose-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-rose-500 font-sans"
-          />
+        {/* Date Selector & Operations CSV Export */}
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          <div className="flex items-center gap-1.5 bg-rose-50/50 dark:bg-slate-950 border border-rose-200 dark:border-slate-800 rounded-xl px-2.5 py-1 text-xs">
+            <span className="text-[11px] text-slate-400">اليوم:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="bg-transparent text-xs text-slate-900 dark:text-white focus:outline-none font-sans cursor-pointer"
+            />
+          </div>
+
+          {/* Export Daily Bookings Button */}
+          <button
+            type="button"
+            onClick={handleExportDailyCsv}
+            title={`تصدير حجوزات يوم ${selectedDate} إلى ملف CSV`}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer whitespace-nowrap"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>تصدير اليوم (CSV)</span>
+          </button>
+
+          {/* Export Full Archive Button */}
+          <button
+            type="button"
+            onClick={handleExportAllArchiveCsv}
+            title="تصدير الأرشيف الشامل لجميع حجوزات الصالون"
+            className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>الأرشيف الشامل</span>
+          </button>
         </div>
       </div>
+
+      {/* CSV Export Success Alert Banner */}
+      {exportNotice && (
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-3 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-bold">{exportNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExportNotice(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* VIEW 0: INTERACTIVE FULLCALENDAR */}
       {activeSubTab === 'interactive_fullcalendar' && (
@@ -540,19 +626,42 @@ export const UnifiedBookingCalendarManager: React.FC<Props> = ({
               />
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400">تصفية حسب الأخصائية:</span>
-              <select
-                value={selectedStaffFilter}
-                onChange={e => setSelectedStaffFilter(e.target.value)}
-                className="bg-rose-50/50 dark:bg-slate-950 border border-rose-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200"
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">تصفية الأخصائية:</span>
+                <select
+                  value={selectedStaffFilter}
+                  onChange={e => setSelectedStaffFilter(e.target.value)}
+                  className="bg-rose-50/50 dark:bg-slate-950 border border-rose-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200"
+                >
+                  <option value="all">جميع الأخصائيات والكراسي</option>
+                  <option value="سارة">سارة العتيبي</option>
+                  <option value="ريم">ريم الدوسري</option>
+                  <option value="نورة">نورة القحطاني</option>
+                  <option value="منى">منى الشمري</option>
+                </select>
+              </div>
+
+              {/* Quick CSV Export Daily & Archive Buttons */}
+              <button
+                type="button"
+                onClick={handleExportDailyCsv}
+                title={`تصدير حجوزات ${selectedDate} إلى ملف CSV`}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap"
               >
-                <option value="all">جميع الأخصائيات والكراسي</option>
-                <option value="سارة">سارة العتيبي</option>
-                <option value="ريم">ريم الدوسري</option>
-                <option value="نورة">نورة القحطاني</option>
-                <option value="منى">منى الشمري</option>
-              </select>
+                <Download className="w-3.5 h-3.5" />
+                <span>تصدير اليوم ({currentDayBookings.length}) CSV</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportAllArchiveCsv}
+                title="تصدير الأرشيف الشامل لجميع حجوزات الصالون"
+                className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>الأرشيف الشامل ({salonBookings.length})</span>
+              </button>
             </div>
           </div>
 

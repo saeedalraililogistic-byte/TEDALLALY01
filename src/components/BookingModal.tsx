@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Salon, Service, Booking } from '../types.ts';
+import { Salon, Service, Booking, User as UserType } from '../types.ts';
 import { 
   Calendar, 
   Clock, 
@@ -35,6 +35,7 @@ interface Props {
   service: Service;
   availableServices?: Service[];
   existingBookings?: Booking[];
+  currentUser?: UserType | null;
   onConfirm: (booking: Booking) => void;
   onCancel: () => void;
 }
@@ -44,6 +45,7 @@ export const BookingModal: React.FC<Props> = ({
   service: initialService,
   availableServices = [],
   existingBookings = [],
+  currentUser = null,
   onConfirm,
   onCancel,
 }) => {
@@ -61,8 +63,8 @@ export const BookingModal: React.FC<Props> = ({
   const [time, setTime] = useState('16:00');
   const [staffName, setStaffName] = useState('أي أخصائية متاحة (أسرع حجز)');
   const [serviceLocation, setServiceLocation] = useState<'salon' | 'home'>('salon');
-  const [clientName, setClientName] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
+  const [clientName, setClientName] = useState(currentUser?.name || '');
+  const [clientPhone, setClientPhone] = useState(currentUser?.phone || '');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'electronic' | 'smart_deposit' | 'on_arrival'>('electronic');
   const [hasWhatsAppConsent, setHasWhatsAppConsent] = useState(true);
@@ -250,7 +252,7 @@ export const BookingModal: React.FC<Props> = ({
       _id: `bkg_${Date.now()}`,
       appointmentDate: date,
       appointmentTime: time,
-      customerId: `usr_${Date.now()}`,
+      customerId: currentUser?._id || `guest_${Date.now()}`,
       salonId: salon._id,
       serviceId: selectedService._id,
       staffId: staffName,
@@ -1038,6 +1040,11 @@ export const BookingModal: React.FC<Props> = ({
                         <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
                           <Lock className="w-3.5 h-3.5 text-emerald-500" />
                           <span>بوابة الدفع المعتمدة: Tap Payments</span>
+                          {TAP_CONFIG.publicKey.startsWith('pk_live_') && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-300 dark:border-emerald-800">
+                              🟢 دفع مباشر حي
+                            </span>
+                          )}
                         </div>
                         <span className="text-[10px] font-mono text-slate-500 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                           https://tedallaly.com/ar

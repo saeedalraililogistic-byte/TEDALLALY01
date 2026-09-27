@@ -20,8 +20,12 @@ import {
   MapPin,
   Check,
   Table as TableIcon,
-  Bell
+  Bell,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2
 } from 'lucide-react';
+import { exportBookingsToCSV } from '../lib/exportCsvService.ts';
 
 interface Props {
   bookings: Booking[];
@@ -44,6 +48,23 @@ export const BookingsDashboard: React.FC<Props> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+
+  const handleExportCsv = (onlyToday: boolean = false) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const targetSalonName = salons[0]?.salonName || 'منصة تدلّلي';
+    const result = exportBookingsToCSV(bookings, targetSalonName, {
+      targetDate: onlyToday ? todayStr : undefined,
+      filePrefix: onlyToday ? 'حجوزات_اليوم' : 'ارشيف_الحجوزات'
+    });
+
+    if (result.success) {
+      setExportNotice(`تم تصدير ${result.count} حجز ${onlyToday ? `ليوم (${todayStr})` : 'من الأرشيف الشامل'} إلى ملف CSV (${result.filename}) بنجاح! 📁`);
+    } else {
+      setExportNotice(onlyToday ? `لا توجد حجوزات مسجلة لتاريخ اليوم (${todayStr}).` : 'لا توجد حجوزات لتصديرها.');
+    }
+    setTimeout(() => setExportNotice(null), 5000);
+  };
 
   // Calculate metrics
   const totalAmount = bookings.reduce((sum, b) => sum + (b.snapshot?.totalAmount || 150), 0);
@@ -171,11 +192,52 @@ export const BookingsDashboard: React.FC<Props> = ({
           </button>
         </div>
 
-        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 self-end sm:self-auto">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>حماية ضد التضارب 100% بين الحجوزات اليدوية والآلية</span>
+        <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+          {/* Quick Daily Export CSV */}
+          <button
+            type="button"
+            onClick={() => handleExportCsv(true)}
+            title="تصدير حجوزات اليوم إلى ملف CSV"
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>تصدير اليوم (CSV)</span>
+          </button>
+
+          {/* Full Archive Export CSV */}
+          <button
+            type="button"
+            onClick={() => handleExportCsv(false)}
+            title="تصدير أرشيف جميع الحجوزات إلى ملف CSV"
+            className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>الأرشيف الشامل ({bookings.length})</span>
+          </button>
+
+          <div className="hidden lg:flex text-xs text-slate-500 dark:text-slate-400 items-center gap-1 mr-2 border-r border-slate-200 dark:border-slate-800 pr-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>حماية ضد التضارب 100%</span>
+          </div>
         </div>
       </div>
+
+      {/* CSV Export Success Alert Banner */}
+      {exportNotice && (
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-3 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-bold">{exportNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExportNotice(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* RENDER CALENDAR VIEW OR TABLE VIEW */}
       {viewMode === 'calendar' ? (

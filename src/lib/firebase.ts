@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { firebaseConfig } from './firebaseConfig.ts';
 
 // Initialize Firebase App
@@ -9,6 +10,9 @@ export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = firebaseConfig.firestoreDatabaseId 
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
+
+// Initialize Firebase Authentication
+export const auth = getAuth(app);
 
 // Test Firestore Connection as required by skill guidelines
 export async function testFirestoreConnection(): Promise<boolean> {

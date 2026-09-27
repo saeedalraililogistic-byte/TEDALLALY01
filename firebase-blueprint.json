@@ -48,9 +48,48 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "salonId", "customerName", "customerPhone", "appointmentDate", "appointmentTime", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Real in-app and push notifications for salon approval, rejection, and appointments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "read": { "type": "boolean" },
+        "urgency": { "type": "string" },
+        "recipientRole": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "salonId": { "type": "string" },
+        "rejectionReason": { "type": "string" }
+      },
+      "required": ["id", "type", "title", "message", "timestamp", "read"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profiles authenticated via Firebase Auth",
+      "type": "object",
+      "properties": {
+        "_id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string" },
+        "city": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "linkedProviderId": { "type": "string" }
+      },
+      "required": ["_id", "name", "email", "role"]
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Authenticated user accounts and role definitions"
+    },
     "/salons/{salonId}": {
       "schema": { "$ref": "#/entities/Salon" },
       "description": "Public and verified salon entities"
@@ -62,6 +101,10 @@
     "/bookings/{bookingId}": {
       "schema": { "$ref": "#/entities/Booking" },
       "description": "Customer bookings brokered through Tedallaly"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Real-time persistent notifications for salons and customers"
     }
   }
 }

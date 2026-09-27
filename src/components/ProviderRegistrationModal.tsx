@@ -12,11 +12,12 @@ import {
   ShieldCheck,
   CreditCard
 } from 'lucide-react';
-import { Salon } from '../types.ts';
+import { Salon, User } from '../types.ts';
 
 interface RegistrationModalProps {
   isOpen: boolean;
   type: 'salon' | 'freelancer';
+  currentUser?: User | null;
   onClose: () => void;
   onSubmit: (newProvider: Salon) => void;
 }
@@ -24,6 +25,7 @@ interface RegistrationModalProps {
 export const ProviderRegistrationModal: React.FC<RegistrationModalProps> = ({
   isOpen,
   type,
+  currentUser,
   onClose,
   onSubmit
 }) => {
@@ -68,6 +70,9 @@ export const ProviderRegistrationModal: React.FC<RegistrationModalProps> = ({
       status: 'pending_verification', // Starts as pending verification for admin review!
       isActive: true,
       providerType: isFreelancer ? 'freelancer' : 'salon',
+      ownerId: currentUser?._id || `usr_${newId}`,
+      ownerEmail: currentUser?.email || `${newSlug}@tedallaly.com`,
+      ownerName: currentUser?.name || name.trim(),
       freelanceDocumentNumber: isFreelancer ? docNumber.trim() : undefined,
       commercialRegisterNumber: !isFreelancer ? docNumber.trim() : undefined,
       vatNumber: !isFreelancer ? (vatNumber.trim() || '310492817200003') : undefined,

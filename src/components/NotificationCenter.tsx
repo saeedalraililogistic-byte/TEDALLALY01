@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { InAppNotification, Booking } from '../types.ts';
+import { InAppNotification, Booking, User } from '../types.ts';
 import { 
   Bell, 
   Clock, 
@@ -15,39 +15,73 @@ import {
   RefreshCw, 
   Volume2,
   ChevronDown,
-  Info
+  Info,
+  FileCheck,
+  CalendarCheck,
+  Building2,
+  ShieldCheck
 } from 'lucide-react';
 import { playNotificationSound } from '../lib/notificationService.ts';
 
 interface Props {
   notifications: InAppNotification[];
+  currentUser?: User | null;
+  activeSalonId?: string;
   onMarkAsRead: (id: string) => void;
   onMarkAllAsRead: () => void;
   onDeleteNotification: (id: string) => void;
   onClearAll: () => void;
   onSelectBooking?: (bookingId: string) => void;
-  onTriggerSimulatedReminder: () => void;
-  onTriggerSimulatedConfirmation: () => void;
+  onTriggerSimulatedReminder?: () => void;
+  onTriggerSimulatedConfirmation?: () => void;
   onManualScanProximity: () => void;
 }
 
 export const NotificationCenter: React.FC<Props> = ({
   notifications,
+  currentUser,
+  activeSalonId,
   onMarkAsRead,
   onMarkAllAsRead,
   onDeleteNotification,
   onClearAll,
   onSelectBooking,
-  onTriggerSimulatedReminder,
-  onTriggerSimulatedConfirmation,
   onManualScanProximity,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | 'reminders' | 'salon_updates'>('all');
-  const [showSandbox, setShowSandbox] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | 'admin_tasks' | 'salon_compliance' | 'bookings'>('all');
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Audience filtering: Only show notifications relevant to the current user!
+  const userNotifications = notifications.filter(n => {
+    if (!currentUser) {
+      // Guests only see general notifications
+      return n.recipientRole === 'all' || !n.recipientRole;
+    }
+    if (currentUser.role === 'admin') {
+      // Admin sees everything
+      return true;
+    }
+    if (currentUser.role === 'salon_owner' || currentUser.role === 'freelancer') {
+      // Salon owner only sees notifications for their own salon or targeted to them
+      if (n.recipientRole === 'admin') return false; // Admin-only reviews not visible to salon
+      if (n.salonId && activeSalonId && n.salonId === activeSalonId) return true;
+      if (currentUser.linkedProviderId && n.salonId === currentUser.linkedProviderId) return true;
+      if (n.recipientId === currentUser._id) return true;
+      if (n.recipientRole === 'salon_owner' || n.recipientRole === 'freelancer' || n.recipientRole === 'all') {
+        // If it belongs to a different salon, exclude it
+        if (n.salonId && n.salonId !== activeSalonId && n.salonId !== currentUser.linkedProviderId) return false;
+        return true;
+      }
+      return false;
+    }
+    // Customer
+    if (n.recipientRole === 'admin' || n.recipientRole === 'salon_owner') return false;
+    if (n.recipientId && n.recipientId === currentUser._id) return true;
+    return n.type === 'appointment_reminder' || n.type === 'booking_confirmed' || n.type === 'booking_cancelled';
+  });
+
+  const unreadCount = userNotifications.filter(n => !n.read).length;
 
   // Close panel on outside click
   useEffect(() => {
@@ -64,10 +98,11 @@ export const NotificationCenter: React.FC<Props> = ({
     };
   }, [isOpen]);
 
-  const filteredNotifications = notifications.filter(n => {
+  const filteredNotifications = userNotifications.filter(n => {
     if (activeFilter === 'unread') return !n.read;
-    if (activeFilter === 'reminders') return n.type === 'appointment_reminder';
-    if (activeFilter === 'salon_updates') return n.type === 'status_change' || n.type === 'booking_confirmed' || n.type === 'booking_cancelled';
+    if (activeFilter === 'admin_tasks') return n.type === 'salon_registered_pending' || n.type === 'documents_uploaded';
+    if (activeFilter === 'salon_compliance') return n.type === 'salon_approved' || n.type === 'salon_rejected' || n.type === 'document_approved' || n.type === 'document_rejected';
+    if (activeFilter === 'bookings') return n.type === 'new_booking_received' || n.type === 'booking_confirmed' || n.type === 'appointment_reminder' || n.type === 'booking_cancelled';
     return true;
   });
 
@@ -85,6 +120,33 @@ export const NotificationCenter: React.FC<Props> = ({
 
   const getNotificationIcon = (type: InAppNotification['type'], urgency: InAppNotification['urgency']) => {
     switch (type) {
+      case 'salon_registered_pending':
+      case 'documents_uploaded':
+        return (
+          <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 shadow-xs">
+            <FileCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          </div>
+        );
+      case 'salon_approved':
+      case 'document_approved':
+        return (
+          <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-xs">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          </div>
+        );
+      case 'salon_rejected':
+      case 'document_rejected':
+        return (
+          <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 shadow-xs">
+            <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+          </div>
+        );
+      case 'new_booking_received':
+        return (
+          <div className="w-9 h-9 rounded-xl bg-pink-100 dark:bg-pink-950/60 border border-pink-300 dark:border-pink-700 text-pink-600 dark:text-pink-400 flex items-center justify-center shrink-0 shadow-xs">
+            <CalendarCheck className="w-5 h-5 text-pink-600 dark:text-pink-400" />
+          </div>
+        );
       case 'appointment_reminder':
         return (
           <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
@@ -188,17 +250,17 @@ export const NotificationCenter: React.FC<Props> = ({
           <div className="flex items-center gap-1 p-2 bg-slate-50/60 dark:bg-slate-950/60 border-b border-rose-100/60 dark:border-slate-800/80 overflow-x-auto text-[11px]">
             <button
               onClick={() => setActiveFilter('all')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap cursor-pointer ${
                 activeFilter === 'all'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-white'
               }`}
             >
-              الكل ({notifications.length})
+              الكل ({userNotifications.length})
             </button>
             <button
               onClick={() => setActiveFilter('unread')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap cursor-pointer ${
                 activeFilter === 'unread'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-white'
@@ -206,25 +268,40 @@ export const NotificationCenter: React.FC<Props> = ({
             >
               غير مقروءة ({unreadCount})
             </button>
+            {currentUser?.role === 'admin' && (
+              <button
+                onClick={() => setActiveFilter('admin_tasks')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
+                  activeFilter === 'admin_tasks'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30'
+                }`}
+              >
+                <FileCheck className="w-3.5 h-3.5" />
+                <span>طلبات الصالونات والمستندات</span>
+              </button>
+            )}
             <button
-              onClick={() => setActiveFilter('reminders')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
-                activeFilter === 'reminders'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+              onClick={() => setActiveFilter('salon_compliance')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
+                activeFilter === 'salon_compliance'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30'
               }`}
             >
-              <span>⏰ تذكيرات المواعيد</span>
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>اعتمادات وتراخيص الصالون</span>
             </button>
             <button
-              onClick={() => setActiveFilter('salon_updates')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap flex items-center gap-1 ${
-                activeFilter === 'salon_updates'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+              onClick={() => setActiveFilter('bookings')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
+                activeFilter === 'bookings'
+                  ? 'bg-pink-600 text-white shadow-xs'
+                  : 'text-pink-700 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950/30'
               }`}
             >
-              <span>✨ تأكيدات الصالون</span>
+              <CalendarCheck className="w-3.5 h-3.5" />
+              <span>الحجوزات والمواعيد</span>
             </button>
           </div>
 
@@ -317,6 +394,14 @@ export const NotificationCenter: React.FC<Props> = ({
                         {notif.message}
                       </p>
 
+                      {/* Display Exact Rejection Reason if present */}
+                      {notif.rejectionReason && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-rose-100/80 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/70 text-[11px] text-rose-800 dark:text-rose-200">
+                          <span className="font-bold block mb-0.5">سبب القرار الإداري المسجل:</span>
+                          <span className="leading-relaxed">{notif.rejectionReason}</span>
+                        </div>
+                      )}
+
                       {/* Snapshot Details Tag */}
                       {notif.bookingSnapshot && (
                         <div className="mt-2 p-2 rounded-lg bg-white/90 dark:bg-slate-950/80 border border-rose-100/80 dark:border-slate-800 text-[10px] space-y-1">
@@ -391,52 +476,6 @@ export const NotificationCenter: React.FC<Props> = ({
                   </div>
                 </div>
               ))
-            )}
-          </div>
-
-          {/* Interactive Simulation / Test Sandbox Accordion */}
-          <div className="border-t border-rose-100 dark:border-slate-800 bg-rose-50/50 dark:bg-slate-900/60 p-3">
-            <button
-              type="button"
-              onClick={() => setShowSandbox(!showSandbox)}
-              className="w-full flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
-            >
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-rose-500" />
-                <span>أدوات تجربة واختبار التنبيهات المباشرة 🧪</span>
-              </div>
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSandbox ? 'rotate-180' : ''}`} />
-            </button>
-
-            {showSandbox && (
-              <div className="mt-3 space-y-2 text-[11px] pt-2 border-t border-rose-200/50 dark:border-slate-800">
-                <p className="text-slate-500 dark:text-slate-400 text-[10px]">
-                  يمكنكِ تجربة النظام بمحاكاة وصول إشعار اقتراب موعد أو تأكيد الصالون فوراً:
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onTriggerSimulatedReminder();
-                      playNotificationSound();
-                    }}
-                    className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-950/70 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-bold text-center transition-colors cursor-pointer"
-                  >
-                    ⏰ محاكاة اقتراب موعد حجز
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onTriggerSimulatedConfirmation();
-                      playNotificationSound();
-                    }}
-                    className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold text-center transition-colors cursor-pointer"
-                  >
-                    ✨ محاكاة تأكيد حجز من صالون
-                  </button>
-                </div>
-              </div>
             )}
           </div>
         </div>

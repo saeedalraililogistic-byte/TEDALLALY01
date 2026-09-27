@@ -8,14 +8,17 @@ import {
   initialStaff, 
   initialReviews 
 } from './store/data.ts';
-import { Salon, Service, Booking, FlashOffer, InAppNotification } from './types.ts';
+import { Salon, Service, Booking, FlashOffer, InAppNotification, User } from './types.ts';
 import { testFirestoreConnection } from './lib/firebase.ts';
 import { 
   syncBookingToFirestore, 
   updateBookingStatusInFirestore, 
   syncServiceToFirestore,
   syncSalonToFirestore,
-  seedInitialDataToFirestore 
+  syncNotificationToFirestore,
+  seedInitialDataToFirestore,
+  listenToRealtimeSalons,
+  listenToRealtimeNotifications
 } from './lib/firestoreService.ts';
 import { 
   getStoredNotifications, 
@@ -23,6 +26,13 @@ import {
   checkApproachingBookings, 
   createStatusChangeNotification,
   createProximityReminderNotification,
+  createSalonApprovalNotification,
+  createSalonRejectionNotification,
+  createDocumentRejectionNotification,
+  createDocumentApprovedNotification,
+  createSalonRegistrationAdminNotification,
+  createSalonDocumentsReuploadedAdminNotification,
+  createNewBookingSalonNotification,
   playNotificationSound 
 } from './lib/notificationService.ts';
 import { useTheme } from './context/ThemeContext.tsx';
@@ -44,7 +54,9 @@ import { FloatingNotificationToast } from './components/FloatingNotificationToas
 import { LegalPoliciesModal, LegalPolicyTab } from './components/LegalPoliciesModal.tsx';
 import { LegalHubView } from './components/LegalHubView.tsx';
 import { RoleSwitcher } from './components/RoleSwitcher.tsx';
-import { AuthModal } from './components/AuthModal.tsx';
+import { LoginModal } from './components/LoginModal.tsx';
+import { RegisterModal } from './components/RegisterModal.tsx';
+import { subscribeToAuthState, logoutUser } from './lib/authService.ts';
 import { ProviderRegistrationModal } from './components/ProviderRegistrationModal.tsx';
 import { Footer } from './components/Footer.tsx';
 import { 
@@ -191,14 +203,13 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Auth Modal State (Login & Register)
-  const [authModal, setAuthModal] = useState<{
+  // Separate Authentication Modals State
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [registerModal, setRegisterModal] = useState<{
     isOpen: boolean;
-    mode: 'login' | 'register';
     initialRole?: 'customer' | 'salon_owner' | 'freelancer';
   }>({
     isOpen: false,
-    mode: 'login',
     initialRole: 'customer'
   });
 
@@ -211,18 +222,113 @@ export default function App() {
     type: 'salon'
   });
 
-  const [selectedSalonId, setSelectedSalonId] = useState<string>('');
+  const [selectedSalonId, setSelectedSalonId] = useState<string>(() => {
+    try {
+      return localStorage.getItem('tedallaly_active_salon_id') || '';
+    } catch {
+      return '';
+    }
+  });
 
-  // Default active salon (e.g. linked to user, or selected, or first verified salon)
-  const activeSalon = salons.find(s => s._id === selectedSalonId) || 
-                      (currentUser?.linkedProviderId ? salons.find(s => s._id === currentUser.linkedProviderId) : undefined) ||
-                      salons.find(s => s.salonName.includes('احسان') || s.status === 'verified') || 
-                      salons[0];
+  useEffect(() => {
+    try {
+      if (selectedSalonId) {
+        localStorage.setItem('tedallaly_active_salon_id', selectedSalonId);
+      }
+    } catch {
+      // ignore
+    }
+  }, [selectedSalonId]);
+
+  // Multi-Tenant Isolation: strictly returns ONLY the salons owned by the given provider account
+  const getUserSalons = (user: User | null, allSalons: Salon[]): Salon[] => {
+    if (!user) return [];
+
+    const userEmail = (user.email || '').toLowerCase().trim();
+
+    return allSalons.filter(s => {
+      // 1. Direct owner ID match
+      if (s.ownerId && s.ownerId === user._id) return true;
+      // 2. User's explicitly linked provider ID
+      if (user.linkedProviderId && s._id === user.linkedProviderId) return true;
+      // 3. Exact owner Email match
+      if (s.ownerEmail && userEmail && s.ownerEmail.toLowerCase().trim() === userEmail) return true;
+
+      return false;
+    });
+  };
+
+  const userOwnedSalons = getUserSalons(currentUser, salons);
+
+  // Default active salon: strictly isolates salon owners to their own salon
+  const activeSalon: Salon = (() => {
+    if (currentUser?.role === 'admin') {
+      return (selectedSalonId ? salons.find(s => s._id === selectedSalonId) : undefined) || salons[0];
+    }
+    if (currentUser?.role === 'salon_owner' || currentUser?.role === 'freelancer') {
+      const selected = userOwnedSalons.find(s => s._id === selectedSalonId);
+      if (selected) return selected;
+      if (userOwnedSalons.length > 0) return userOwnedSalons[0];
+
+      // If a salon owner is logged in but has no registered salon in state yet,
+      // create their dedicated isolated profile so they NEVER see competitor salons (Ehsan or Anamil)!
+      const isFreelance = currentUser.role === 'freelancer';
+      const autoId = currentUser.linkedProviderId || ('salon_' + currentUser._id);
+      const generatedSalon: Salon = {
+        _id: autoId,
+        _creationTime: Date.now(),
+        salonName: currentUser.name.includes('صالون') ? currentUser.name : (isFreelance ? `${currentUser.name} • خبيرة مستقلة` : `صالون ${currentUser.name}`),
+        slug: 'salon-' + currentUser._id,
+        city: currentUser.city || 'الرياض',
+        district: 'حي معتمد',
+        address: `${currentUser.city || 'الرياض'} - حي معتمد`,
+        phone: currentUser.phone || '0555123456',
+        description: isFreelance ? 'خبيرة تجميل ومكياج مستقلة معتمدة' : 'صالون تجميل وعناية متكامل ومعتمد',
+        status: 'pending_verification',
+        isActive: true,
+        providerType: isFreelance ? 'freelancer' : 'salon',
+        ownerId: currentUser._id,
+        ownerEmail: currentUser.email,
+        ownerName: currentUser.name,
+        commercialRegisterNumber: '1010892999',
+        taxNumber: '300192837400003',
+        documents: [
+          {
+            id: 'doc_cr_' + autoId,
+            type: isFreelance ? 'freelance_document' : 'commercial_register',
+            title: isFreelance ? 'وثيقة العمل الحر المعتمدة' : 'السجل التجاري الرسمي',
+            fileName: 'CR_Official_Document.pdf',
+            fileNumber: '1010892999',
+            uploadedAt: new Date().toISOString().split('T')[0],
+            status: 'pending'
+          },
+          {
+            id: 'doc_bank_' + autoId,
+            type: 'bank_certificate',
+            title: 'شهادة الآيبان والحساب البنكي',
+            fileName: 'IBAN_Certificate.pdf',
+            uploadedAt: new Date().toISOString().split('T')[0],
+            status: 'pending'
+          }
+        ]
+      };
+      return generatedSalon;
+    }
+    // Visitors & Customers
+    return (selectedSalonId ? salons.find(s => s._id === selectedSalonId) : undefined) ||
+           salons.find(s => s.status === 'verified') || 
+           salons[0];
+  })();
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     if (user.role === 'salon_owner' || user.role === 'freelancer') {
-      if (user.linkedProviderId) setSelectedSalonId(user.linkedProviderId);
+      const owned = getUserSalons(user, salons);
+      if (owned.length > 0) {
+        setSelectedSalonId(owned[0]._id);
+      } else if (user.linkedProviderId) {
+        setSelectedSalonId(user.linkedProviderId);
+      }
       setActiveTab('salon_dash');
     } else if (user.role === 'admin') {
       setActiveTab('admin_dash');
@@ -230,31 +336,76 @@ export default function App() {
     addToast({
       type: 'success',
       title: `مرحباً بكِ مجدداً، ${user.name} 👋`,
-      description: `تم تسجيل الدخول بنجاح بصلاحية: ${user.role === 'admin' ? 'المدير العام' : user.role === 'salon_owner' ? 'إدارة صالون' : user.role === 'freelancer' ? 'خبيرة مستقلة' : 'عميلة'}`
+      description: `تم التحقق من بيانات الدخول بنجاح عبر Firebase Authentication (${user.role === 'admin' ? 'المدير العام' : user.role === 'salon_owner' ? 'إدارة صالون' : user.role === 'freelancer' ? 'خبيرة مستقلة' : 'عميلة'}).`
     });
   };
 
-  const handleRegisterSuccess = (newUser: User) => {
-    setUsers(prev => [newUser, ...prev]);
+  const handleRegisterSuccess = (newUser: User, newSalon?: Salon) => {
+    setUsers(prev => [newUser, ...prev.filter(u => u._id !== newUser._id)]);
     setCurrentUser(newUser);
-    if (newUser.role === 'salon_owner' || newUser.role === 'freelancer') {
-      setActiveTab('salon_dash');
+
+    if (newSalon) {
+      setSalons(prev => [newSalon, ...prev.filter(s => s._id !== newSalon._id)]);
+      setSelectedSalonId(newSalon._id);
+
+      // Dispatch real-time instant notification to Platform Admin!
+      const adminNotif = createSalonRegistrationAdminNotification(newSalon);
+      setNotifications(prev => [adminNotif, ...prev]);
+      syncNotificationToFirestore(adminNotif);
+
+      // Dispatch instant welcome confirmation to the new salon owner!
+      const isFreelance = newSalon.providerType === 'freelancer';
+      const welcomeNotif: InAppNotification = {
+        id: `notif_welcome_${newSalon._id}_${Date.now()}`,
+        salonId: newSalon._id,
+        recipientId: newUser._id,
+        recipientRole: isFreelance ? 'freelancer' : 'salon_owner',
+        type: 'salon_registered_pending',
+        title: isFreelance ? 'تم رفع وثائق العمل الحر بنجاح 🌸' : 'تم استلام أوراق الصالون وبانتظار التدقيق الإداري 🏢',
+        message: `أهلاً بكِ في تدلّلي! تم استلام أوراق ومستندات "${newSalon.salonName}" وهي الآن قيد المراجعة والتدقيق الإداري.`,
+        timestamp: Date.now(),
+        read: false,
+        urgency: 'high',
+        salonSnapshot: {
+          salonName: newSalon.salonName,
+          providerType: newSalon.providerType,
+          city: newSalon.city,
+          status: 'pending_verification'
+        }
+      };
+      setNotifications(prev => [welcomeNotif, ...prev]);
+      syncNotificationToFirestore(welcomeNotif);
+      playNotificationSound();
+      setActiveFloatingToast(welcomeNotif);
     }
+
+    if (newUser.role === 'salon_owner' || newUser.role === 'freelancer') {
+      if (newUser.linkedProviderId) {
+        setSelectedSalonId(newUser.linkedProviderId);
+      }
+      setActiveTab('salon_dash');
+    } else if (newUser.role === 'admin') {
+      setActiveTab('admin_dash');
+    } else {
+      setActiveTab('market');
+    }
+
     addToast({
       type: 'success',
       title: `أهلاً بكِ في تدلّلي، ${newUser.name}! 🎉`,
-      description: 'تم إنشاء حسابكِ الجديد بنجاح ويمكنكِ الاستفادة من جميع المزايا.'
+      description: 'تم إنشاء حسابكِ الجديد وتأمينه سحابياً بنجاح عبر Firebase Authentication.'
     });
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     const prevName = currentUser?.name || 'المستخدم';
+    await logoutUser();
     setCurrentUser(null);
     setActiveTab('market');
     addToast({
       type: 'info',
       title: 'تم تسجيل الخروج بنجاح 👋',
-      description: `إلى اللقاء ${prevName}. يمكنك تسجيل الدخول في أي وقت.`
+      description: `إلى اللقاء ${prevName}. تم إنهاء الجلسة الآمنة، يمكنك تسجيل الدخول في أي وقت.`
     });
   };
 
@@ -304,17 +455,102 @@ export default function App() {
     });
   };
 
-  // Initialize Firestore connection test and seed verified data on mount
+  // Initialize Firestore connection test and subscribe to real-time updates
   useEffect(() => {
     testFirestoreConnection().then(connected => {
       if (connected) {
-        // Sync real salons, services, and bookings to ensure Firestore database is populated
-        seedInitialDataToFirestore(salons, services, bookings).catch(err => {
-          console.log('Background sync to Firestore status:', err);
+        console.log('✅ Firebase Firestore connected.');
+      }
+    });
+
+    // Subscribe to real-time salons updates from Firestore
+    const unsubSalons = listenToRealtimeSalons((liveSalons) => {
+      setSalons(prevSalons => {
+        const map = new Map<string, Salon>(prevSalons.map(s => [s._id, s]));
+        liveSalons.forEach(ls => {
+          const prev = map.get(ls._id);
+          map.set(ls._id, prev ? { ...prev, ...ls } : ls);
+        });
+        return Array.from(map.values());
+      });
+    });
+
+    // Subscribe to real-time in-app notifications from Firestore
+    let isInitialNotifSnapshot = true;
+    const unsubNotifs = listenToRealtimeNotifications((liveNotifs) => {
+      setNotifications(prevNotifs => {
+        const existingIds = new Set(prevNotifs.map(n => n.id));
+        const incomingNew = liveNotifs.filter(n => !existingIds.has(n.id));
+        if (!isInitialNotifSnapshot && incomingNew.length > 0) {
+          // Play audio alert and show floating toast for the latest incoming real-time notification!
+          playNotificationSound();
+          setActiveFloatingToast(incomingNew[0]);
+        }
+        isInitialNotifSnapshot = false;
+        const notifMap = new Map<string, InAppNotification>(prevNotifs.map(n => [n.id, n]));
+        liveNotifs.forEach(n => {
+          const prev = notifMap.get(n.id);
+          notifMap.set(n.id, prev ? { ...prev, ...n } : n);
+        });
+        const merged = Array.from(notifMap.values());
+        merged.sort((a, b) => b.timestamp - a.timestamp);
+        return merged;
+      });
+    });
+
+    return () => {
+      unsubSalons();
+      unsubNotifs();
+    };
+  }, []);
+
+  // Listen to Firebase Authentication state changes in real-time
+  useEffect(() => {
+    const unsubAuth = subscribeToAuthState((authUser) => {
+      if (authUser) {
+        setCurrentUser(authUser);
+        setUsers(prev => {
+          if (!prev.some(u => u._id === authUser._id)) {
+            return [authUser, ...prev];
+          }
+          return prev.map(u => u._id === authUser._id ? authUser : u);
         });
       }
     });
+
+    return () => unsubAuth();
   }, []);
+
+  // Protected Routes Guard: Guard internal management pages from unauthenticated access
+  useEffect(() => {
+    if (!currentUser) {
+      if (activeTab === 'salon_dash' || activeTab === 'admin_dash' || activeTab === 'database') {
+        setActiveTab('market');
+        setIsLoginModalOpen(true);
+        addToast({
+          type: 'error',
+          title: 'تسجيل الدخول مطلوب 🔒',
+          description: 'يرجى تسجيل الدخول إلى حسابكِ للوصول إلى لوحة التحكم والصفحات المحمية.'
+        });
+      }
+    } else if (currentUser.role === 'customer') {
+      if (activeTab === 'salon_dash' || activeTab === 'admin_dash' || activeTab === 'database') {
+        setActiveTab('market');
+        addToast({
+          type: 'error',
+          title: 'غير مصرح بالدخول ⚠️',
+          description: 'هذه اللوحة مخصصة لأصحاب الصالونات المعتمدة وإدارة المنصة فقط.'
+        });
+      }
+    } else if ((currentUser.role === 'salon_owner' || currentUser.role === 'freelancer') && (activeTab === 'admin_dash' || activeTab === 'database')) {
+      setActiveTab('salon_dash');
+      addToast({
+        type: 'error',
+        title: 'غير مصرح بالدخول ⚠️',
+        description: 'لوحة الإدارة العامة وقواعد البيانات مخصصة للمدير العام فقط.'
+      });
+    }
+  }, [activeTab, currentUser]);
 
   // Toast Notifications State
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -447,10 +683,12 @@ export default function App() {
     const salonName = newBooking.snapshot?.salonName || 'الصالون';
     const serviceName = newBooking.snapshot?.serviceName || 'الخدمة';
 
-    // In-App Notification creation for new booking
+    // In-App Notification creation for new booking (Customer alert)
     const newNotif: InAppNotification = {
       id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       bookingId: newBooking._id,
+      recipientId: newBooking.customerId,
+      recipientRole: 'customer',
       type: 'booking_confirmed',
       title: 'تم تسجيل حجزكِ بنجاح وتأكيده! 🎉',
       message: `تم حجز موعد "${serviceName}" لدى ${salonName} بتاريخ ${newBooking.appointmentDate} الساعة ${newBooking.appointmentTime} وتأمينه سحابياً ضد أي تضارب.`,
@@ -469,6 +707,16 @@ export default function App() {
       }
     };
     setNotifications(prev => [newNotif, ...prev]);
+    syncNotificationToFirestore(newNotif);
+
+    // In-App Notification for the Salon Owner (Immediate Real-time Alert to Salon)
+    const bookedSalon = salons.find(s => s._id === newBooking.salonId);
+    if (bookedSalon) {
+      const salonAlert = createNewBookingSalonNotification(newBooking, bookedSalon);
+      setNotifications(prev => [salonAlert, ...prev]);
+      syncNotificationToFirestore(salonAlert);
+    }
+
     setActiveFloatingToast(newNotif);
     playNotificationSound();
 
@@ -482,38 +730,102 @@ export default function App() {
   // Salon Document Verification & Admin Approval Handlers
   const handleUpdateSalon = (updatedSalon: Salon) => {
     setSalons(prev => prev.map(s => s._id === updatedSalon._id ? updatedSalon : s));
+    syncSalonToFirestore(updatedSalon);
+
+    // Dispatch real-time alert to Platform Admin that salon re-uploaded/updated documents for review
+    const adminAlert = createSalonDocumentsReuploadedAdminNotification(updatedSalon);
+    setNotifications(prev => [adminAlert, ...prev]);
+    syncNotificationToFirestore(adminAlert);
+    playNotificationSound();
+    setActiveFloatingToast(adminAlert);
+
     addToast({
       type: 'info',
       title: 'تم تحديث بيانات الصالون والمستندات',
-      description: `تم تحديث ملف صالون ${updatedSalon.salonName} وإرسال التحديث للمراجعة الإدارية.`
+      description: `تم تحديث ملف صالون ${updatedSalon.salonName} وإرسال إشعار فوري للإدارة للمراجعة والتدقيق.`
     });
   };
 
   const handleRegisterProvider = (newProvider: Salon) => {
-    setSalons(prev => [newProvider, ...prev]);
-
-    // Automatically create a linked user account for this new provider
     const isFreelance = newProvider.providerType === 'freelancer';
-    const newUser: User = {
-      _id: 'usr_' + newProvider._id,
-      name: newProvider.salonName,
-      email: `${newProvider.slug}@tedallaly.com`,
-      phone: newProvider.phone,
-      role: isFreelance ? 'freelancer' : 'salon_owner',
-      city: newProvider.city,
-      isActive: true,
-      linkedProviderId: newProvider._id
+
+    // If current user is logged in, link to them; otherwise create linked user
+    const ownerId = currentUser ? currentUser._id : ('usr_' + newProvider._id);
+    const ownerEmail = currentUser?.email || `${newProvider.slug}@tedallaly.com`;
+    const ownerName = currentUser?.name || newProvider.salonName;
+
+    const assignedProvider: Salon = {
+      ...newProvider,
+      ownerId,
+      ownerEmail,
+      ownerName,
+      status: 'pending_verification'
     };
 
-    setUsers(prev => [newUser, ...prev]);
-    setCurrentUser(newUser); // switch to newly registered provider so they can view their dashboard immediately!
-    setSelectedSalonId(newProvider._id);
+    setSalons(prev => [assignedProvider, ...prev]);
+    syncSalonToFirestore(assignedProvider);
+
+    let providerUser: User;
+    if (currentUser) {
+      providerUser = {
+        ...currentUser,
+        role: isFreelance ? 'freelancer' : 'salon_owner',
+        linkedProviderId: assignedProvider._id
+      };
+      setUsers(prev => prev.map(u => u._id === currentUser._id ? providerUser : u));
+      setCurrentUser(providerUser);
+    } else {
+      providerUser = {
+        _id: ownerId,
+        name: ownerName,
+        email: ownerEmail,
+        phone: assignedProvider.phone,
+        role: isFreelance ? 'freelancer' : 'salon_owner',
+        city: assignedProvider.city,
+        isActive: true,
+        linkedProviderId: assignedProvider._id
+      };
+      setUsers(prev => [providerUser, ...prev]);
+      setCurrentUser(providerUser);
+    }
+
+    setSelectedSalonId(assignedProvider._id);
     setActiveTab('salon_dash');
+
+    // 1. Dispatch real-time instant notification to Platform Admin!
+    const adminNotif = createSalonRegistrationAdminNotification(assignedProvider);
+    setNotifications(prev => [adminNotif, ...prev]);
+    syncNotificationToFirestore(adminNotif);
+
+    // 2. Dispatch instant confirmation notification to the newly registered Salon Owner!
+    const salonWelcomeNotif: InAppNotification = {
+      id: `notif_welcome_${assignedProvider._id}_${Date.now()}`,
+      salonId: assignedProvider._id,
+      recipientId: providerUser._id,
+      recipientRole: isFreelance ? 'freelancer' : 'salon_owner',
+      type: 'salon_registered_pending',
+      title: isFreelance ? 'تم رفع وثائق العمل الحر بنجاح 🌸' : 'تم استلام أوراق الصالون وبانتظار التدقيق الإداري 🏢',
+      message: `أهلاً بكِ في تدلّلي! تم استلام أوراق ومستندات "${assignedProvider.salonName}" وهي الآن قيد المراجعة والتدقيق الإداري. ستصلكِ رسالة فورية هنا بمجرد الموافقة وتفعيل الصالون للعميلات.`,
+      timestamp: Date.now(),
+      read: false,
+      urgency: 'high',
+      salonSnapshot: {
+        salonName: assignedProvider.salonName,
+        providerType: assignedProvider.providerType,
+        city: assignedProvider.city,
+        status: 'pending_verification'
+      }
+    };
+    setNotifications(prev => [salonWelcomeNotif, ...prev]);
+    syncNotificationToFirestore(salonWelcomeNotif);
+
+    playNotificationSound();
+    setActiveFloatingToast(salonWelcomeNotif);
 
     addToast({
       type: 'info',
       title: isFreelance ? 'تم رفع طلب تسجيل الخبيرة بنجاح 🌸' : 'تم استلام طلب تسجيل الصالون 🏢',
-      description: 'المستندات القانونية قيد مراجعة وتدقيق إدارة منصة تدلّلي. يمكنك استعراض لوحة التحكم ورفع أي مستندات إضافية.'
+      description: 'المستندات القانونية قيد مراجعة وتدقيق إدارة منصة تدلّلي. وصل إشعار فوري للإدارة.'
     });
   };
 
@@ -536,12 +848,20 @@ export default function App() {
     setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
     syncSalonToFirestore(updatedSalon);
 
+    // Create and dispatch real persistent notification targeted directly to the salon owner
+    const approvalNotif = createSalonApprovalNotification(updatedSalon);
+    setNotifications(prev => [approvalNotif, ...prev]);
+    syncNotificationToFirestore(approvalNotif);
+
+    setActiveFloatingToast(approvalNotif);
+    playNotificationSound();
+
     const isFreelance = targetSalon.providerType === 'freelancer';
 
     addToast({
       type: 'success',
       title: isFreelance ? 'تمت الموافقة واعتماد الخبيرة المستقلة! 🛡️' : 'تمت الموافقة واعتماد الصالون بنجاح! 🛡️',
-      description: `تم اعتماد "${targetSalon.salonName}" رسمياً. يظهر الآن لجميع العميلات ويمكن استقبال الحجوزات ونشر العروض.`
+      description: `تم اعتماد "${targetSalon.salonName}" رسمياً. تم إرسال إشعار فوري لصاحبة الصالون، وأصبح متاحاً للعميلات فوراً.`
     });
   };
 
@@ -549,19 +869,31 @@ export default function App() {
     const targetSalon = salons.find(s => s._id === salonId);
     if (!targetSalon) return;
 
+    const finalReason = reason && reason.trim().length > 0 
+      ? reason 
+      : 'المستندات غير مكتملة أو رخصة البلدية والسجل التجاري غير مطابقة لمتطلبات وزارة التجارة';
+
     const updatedSalon: Salon = {
       ...targetSalon,
       status: 'suspended',
-      verificationNotes: reason || 'المستندات غير مكتملة أو غير مطابقة',
+      verificationNotes: finalReason,
     };
 
     setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
     syncSalonToFirestore(updatedSalon);
 
+    // Create and dispatch real rejection notification with explicit reason directly to the salon owner
+    const rejectionNotif = createSalonRejectionNotification(updatedSalon, finalReason);
+    setNotifications(prev => [rejectionNotif, ...prev]);
+    syncNotificationToFirestore(rejectionNotif);
+
+    setActiveFloatingToast(rejectionNotif);
+    playNotificationSound();
+
     addToast({
       type: 'error',
-      title: 'تم إيقاف/رفض الصالون',
-      description: `تم إيقاف صالون "${targetSalon.salonName}" وحجبه عن العميلات لحين استيفاء الشروط وتصحيح التراخيص.`
+      title: 'تم إيقاف/رفض الصالون وتوثيق السبب ⚠️',
+      description: `تم إرسال إشعار فوري لصالون "${targetSalon.salonName}" بالسبب: ${finalReason}`
     });
   };
 
@@ -569,8 +901,10 @@ export default function App() {
     const targetSalon = salons.find(s => s._id === salonId);
     if (!targetSalon) return;
 
+    let targetDocTitle = 'الوثيقة';
     const updatedDocs = (targetSalon.documents || []).map(d => {
       if (d.id === docId) {
+        targetDocTitle = d.title;
         return {
           ...d,
           status: docStatus,
@@ -586,17 +920,40 @@ export default function App() {
       ...targetSalon,
       status: allApproved ? 'verified' : (docStatus === 'rejected' ? 'suspended' : targetSalon.status),
       documents: updatedDocs,
-      approvedAt: allApproved ? new Date().toISOString() : targetSalon.approvedAt
+      approvedAt: allApproved ? new Date().toISOString() : targetSalon.approvedAt,
+      verificationNotes: docStatus === 'rejected' ? (reason || 'مستند مرفوض') : targetSalon.verificationNotes
     };
 
     setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
     syncSalonToFirestore(updatedSalon);
 
-    addToast({
-      type: docStatus === 'approved' ? 'success' : 'info',
-      title: docStatus === 'approved' ? 'تم اعتماد المستند بنجاح ✓' : 'تم رفض المستند',
-      description: docStatus === 'approved' ? 'تم تحديث حالة المستند وحفظه سحابياً.' : `تم رفض المستند مع إشعار الصالون: ${reason || ''}`
-    });
+    if (docStatus === 'approved') {
+      if (allApproved) {
+        const notif = createSalonApprovalNotification(updatedSalon);
+        setNotifications(prev => [notif, ...prev]);
+        setActiveFloatingToast(notif);
+        playNotificationSound();
+        syncNotificationToFirestore(notif);
+      }
+      addToast({
+        type: 'success',
+        title: 'تم اعتماد المستند بنجاح ✓',
+        description: `تمت مراجعة واعتماد ${targetDocTitle} وحفظه سحابياً.`
+      });
+    } else {
+      const docRejectionReason = reason || 'المستند غير واضح أو منتهي الصلاحية';
+      const docNotif = createDocumentRejectionNotification(updatedSalon, targetDocTitle, docRejectionReason);
+      setNotifications(prev => [docNotif, ...prev]);
+      setActiveFloatingToast(docNotif);
+      playNotificationSound();
+      syncNotificationToFirestore(docNotif);
+
+      addToast({
+        type: 'error',
+        title: 'تم رفض الوثيقة مع إشعار الصالون ⚠️',
+        description: `سبب الرفض: ${docRejectionReason}`
+      });
+    }
   };
 
   const handleUpdateStatus = (id: string, status: string) => {
@@ -818,8 +1175,8 @@ export default function App() {
                       });
                     }}
                     availableUsers={users}
-                    onOpenLogin={() => setAuthModal({ isOpen: true, mode: 'login' })}
-                    onOpenRegister={() => setAuthModal({ isOpen: true, mode: 'register', initialRole: 'customer' })}
+                    onOpenLogin={() => setIsLoginModalOpen(true)}
+                    onOpenRegister={() => setRegisterModal({ isOpen: true, initialRole: 'customer' })}
                     onLogout={handleLogout}
                     onOpenFreelancerRegister={() => setRegistrationModal({ isOpen: true, type: 'freelancer' })}
                     onOpenSalonRegister={() => setRegistrationModal({ isOpen: true, type: 'salon' })}
@@ -838,13 +1195,13 @@ export default function App() {
               ) : (
                 <div className="flex items-center gap-1 sm:gap-2">
                   <button
-                    onClick={() => setAuthModal({ isOpen: true, mode: 'login' })}
+                    onClick={() => setIsLoginModalOpen(true)}
                     className="px-2.5 sm:px-3.5 py-1.5 rounded-xl border border-rose-300 dark:border-rose-500/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-bold transition-all cursor-pointer shadow-xs whitespace-nowrap"
                   >
                     دخول
                   </button>
                   <button
-                    onClick={() => setAuthModal({ isOpen: true, mode: 'register', initialRole: 'customer' })}
+                    onClick={() => setRegisterModal({ isOpen: true, initialRole: 'customer' })}
                     className="px-3 sm:px-4 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-black transition-all cursor-pointer shadow-md shadow-rose-600/20 whitespace-nowrap"
                   >
                     تسجيل
@@ -855,6 +1212,8 @@ export default function App() {
               {/* In-App Notification Center */}
               <NotificationCenter
                 notifications={notifications}
+                currentUser={currentUser}
+                activeSalonId={activeSalon?._id}
                 onMarkAsRead={handleMarkAsRead}
                 onMarkAllAsRead={handleMarkAllAsRead}
                 onDeleteNotification={handleDeleteNotification}
@@ -1111,7 +1470,8 @@ export default function App() {
         {activeTab === 'salon_dash' && (
           <SalonDashboardView
             salon={activeSalon}
-            allSalons={salons}
+            allSalons={currentUser?.role === 'admin' ? salons : (userOwnedSalons.length > 0 ? userOwnedSalons : [activeSalon])}
+            isPlatformAdmin={currentUser?.role === 'admin'}
             onSelectSalon={(id) => setSelectedSalonId(id)}
             services={services}
             bookings={bookings}
@@ -1132,6 +1492,24 @@ export default function App() {
             }}
             onUpdateSalon={handleUpdateSalon}
             onViewPublicPage={() => setActiveTab('market')}
+            onSimulateSalonApprovalNotification={() => {
+              handleApproveSalon(activeSalon._id);
+            }}
+            onSimulateSalonRejectionNotification={() => {
+              handleRejectSalon(activeSalon._id, 'السجل التجاري أو رخصة البلدية منتهية الصلاحية ويلزم تجديدها وتصحيحها');
+            }}
+            onSimulateAdminDocsNotification={() => {
+              const adminNotif = createSalonRegistrationAdminNotification(activeSalon);
+              setNotifications(prev => [adminNotif, ...prev]);
+              syncNotificationToFirestore(adminNotif);
+              setActiveFloatingToast(adminNotif);
+              playNotificationSound();
+              addToast({
+                type: 'info',
+                title: 'وصول إشعار فوري لإدارة المنصة 🏢',
+                description: `تم إرسال إشعار فوري بحساب الإدارة يفيد بأن صالون "${activeSalon.salonName}" رفع أوراقه للمراجعة.`
+              });
+            }}
           />
         )}
 
@@ -1142,6 +1520,19 @@ export default function App() {
             onApproveSalon={handleApproveSalon}
             onRejectSalon={handleRejectSalon}
             onUpdateSalonDocumentStatus={handleUpdateSalonDocumentStatus}
+            onSimulateAdminDocsNotification={() => {
+              const pendingOrFirst = salons.find(s => s.status === 'pending_verification') || salons[0];
+              const adminNotif = createSalonRegistrationAdminNotification(pendingOrFirst);
+              setNotifications(prev => [adminNotif, ...prev]);
+              syncNotificationToFirestore(adminNotif);
+              setActiveFloatingToast(adminNotif);
+              playNotificationSound();
+              addToast({
+                type: 'info',
+                title: 'وصول إشعار صالون جديد للإدارة 🏢',
+                description: `قام صالون "${pendingOrFirst.salonName}" برفع أوراقه الرسمية للمراجعة والتدقيق الإداري.`
+              });
+            }}
           />
         )}
 
@@ -1181,22 +1572,20 @@ export default function App() {
           <BridalPackagesView
             salons={salons}
             onBookPackage={(pkg, salon) => {
-              setSelectedSalonForBooking(salon);
-              // Find or create service for this bridal package
               const bridalService: Service = {
                 _id: pkg.id,
                 salonId: salon._id,
-                title: pkg.name,
+                name: pkg.name,
+                nameAr: pkg.name,
                 description: pkg.tagline,
                 price: pkg.price,
-                durationMinutes: 180,
+                currency: 'SAR',
+                durationMins: 180,
                 categoryId: 'cat_bridal',
-                availableForHome: true,
-                rating: 5.0,
-                reviewCount: 38
+                isActive: true,
+                isAvailableOnline: true,
               };
-              setSelectedServiceForBooking(bridalService);
-              setIsBookingModalOpen(true);
+              handleBookService(salon, bridalService);
             }}
             onBack={() => setActiveTab('market')}
           />
@@ -1246,6 +1635,7 @@ export default function App() {
         <BookingModal
           salon={bookingTarget.salon}
           service={bookingTarget.service}
+          currentUser={currentUser}
           availableServices={services.filter(s => s.salonId === bookingTarget.salon._id)}
           existingBookings={bookings}
           onConfirm={handleConfirmBooking}
@@ -1257,8 +1647,8 @@ export default function App() {
       <Footer 
         onNavigateTab={(tab) => setActiveTab(tab)}
         onOpenLegalDoc={(docId) => setLegalSelectedDocId(docId)}
-        onOpenLogin={() => setAuthModal({ isOpen: true, mode: 'login' })}
-        onOpenRegister={() => setAuthModal({ isOpen: true, mode: 'register', initialRole: 'customer' })}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onOpenRegister={() => setRegisterModal({ isOpen: true, initialRole: 'customer' })}
       />
 
       {/* Real-time Floating Notification Banner */}
@@ -1282,20 +1672,28 @@ export default function App() {
         onClose={() => setIsLegalModalOpen(false)}
       />
 
-      {/* Authentication Modal: Login & Registration */}
-      <AuthModal
-        isOpen={authModal.isOpen}
-        mode={authModal.mode}
-        initialRole={authModal.initialRole}
-        onClose={() => setAuthModal(prev => ({ ...prev, isOpen: false }))}
+      {/* Independent Login Modal: Uses signInWithEmailAndPassword only */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
         onLoginSuccess={handleLoginSuccess}
+        onOpenRegister={() => setRegisterModal({ isOpen: true, initialRole: 'customer' })}
+      />
+
+      {/* Independent Register Modal: Uses createUserWithEmailAndPassword */}
+      <RegisterModal
+        isOpen={registerModal.isOpen}
+        initialRole={registerModal.initialRole}
+        onClose={() => setRegisterModal(prev => ({ ...prev, isOpen: false }))}
         onRegisterSuccess={handleRegisterSuccess}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
       />
 
       {/* Provider & Freelancer Registration Modal */}
       <ProviderRegistrationModal
         isOpen={registrationModal.isOpen}
         type={registrationModal.type}
+        currentUser={currentUser}
         onClose={() => setRegistrationModal(prev => ({ ...prev, isOpen: false }))}
         onSubmit={handleRegisterProvider}
       />
