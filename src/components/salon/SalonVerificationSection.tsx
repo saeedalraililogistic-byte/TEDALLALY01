@@ -117,14 +117,18 @@ export const SalonVerificationSection: React.FC<Props> = ({ salon, onUpdateSalon
       hasMinDocs = hasCr && hasLicense && hasBank;
     }
 
-    const nextStatus = hasMinDocs ? 'pending_verification' : 'documents_required';
+    // Preserve approved status so uploading routine documents NEVER resets or downgrades an approved salon!
+    const isAlreadyApproved = salon.status === 'approved' || salon.status === 'verified';
+    const nextStatus = isAlreadyApproved 
+      ? salon.status 
+      : (hasMinDocs ? 'pending' : 'documents_required');
 
     const updatedSalon: Salon = {
       ...salon,
       commercialRegisterNumber: crNumber.trim() || salon.commercialRegisterNumber,
       taxNumber: taxNumber.trim() || salon.taxNumber,
       documents: updatedDocuments,
-      status: salon.status === 'verified' ? 'verified' : nextStatus,
+      status: nextStatus,
       submittedAt: new Date().toISOString()
     };
 

@@ -184,7 +184,7 @@ export async function registerWithEmail(params: RegisterParams): Promise<{ user:
         address: `${cleanCity} - حي معتمد`,
         phone: cleanPhone,
         description: isFreelance ? 'خبيرة تجميل ومكياج مستقلة معتمدة' : 'صالون تجميل وعناية متكامل ومعتمد',
-        status: 'pending_verification',
+        status: 'pending',
         isActive: true,
         providerType: isFreelance ? 'freelancer' : 'salon',
         ownerId: firebaseUser.uid,

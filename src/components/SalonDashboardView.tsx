@@ -50,7 +50,8 @@ import {
   Filter,
   RefreshCw,
   CheckCircle2,
-  ShieldAlert
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 import { Salon, Service, Booking, FlashOffer } from '../types.ts';
 import { TedallalyLogo } from './TedallalyLogo.tsx';
@@ -118,6 +119,7 @@ export const SalonDashboardView: React.FC<Props> = ({
   const [selectedDateFilter, setSelectedDateFilter] = useState<'today' | 'tomorrow' | 'week'>('today');
   const [flashBoosterActive, setFlashBoosterActive] = useState(false);
   const [flashSuccessToast, setFlashSuccessToast] = useState<string | null>(null);
+  const [serviceRestrictionWarning, setServiceRestrictionWarning] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Form State for Add Service
@@ -132,6 +134,12 @@ export const SalonDashboardView: React.FC<Props> = ({
 
   const salonServices = services.filter(s => s.salonId === salon._id);
   const salonBookings = bookings.filter(b => b.salonId === salon._id || (b.snapshot?.salonName && b.snapshot.salonName.includes(salon.salonName)));
+
+  // Strict lifecycle flags
+  const isSalonApproved = salon.status === 'approved' || salon.status === 'verified';
+  const isPending = salon.status === 'pending' || salon.status === 'pending_verification';
+  const isSuspended = salon.status === 'suspended' || salon.status === 'documents_required';
+  const isRejected = salon.status === 'rejected';
 
   // Dynamic Calculations for Salon Manager KPIs
   const completedBookings = salonBookings.filter(b => b.status === 'completed');
@@ -211,6 +219,11 @@ export const SalonDashboardView: React.FC<Props> = ({
   const handleCreateService = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
+
+    if (!isSalonApproved) {
+      setServiceRestrictionWarning('لا يمكن إضافة أو نشر خدمة جديدة قبل اعتماد الصالون وتفعيله من إدارة المنصة.');
+      return;
+    }
 
     const newService: Service = {
       _id: 'srv_' + Date.now(),
@@ -316,15 +329,19 @@ export const SalonDashboardView: React.FC<Props> = ({
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-black text-slate-900 dark:text-white">{salon.salonName}</h2>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                salon.status === 'verified'
+                isSalonApproved
                   ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20'
-                  : salon.status === 'pending_verification'
-                  ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20'
-                  : 'bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20'
+                  : isSuspended
+                  ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-500/30'
+                  : isRejected
+                  ? 'bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20'
+                  : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20'
               }`}>
                 {salon.city} • SA • {
-                  salon.status === 'verified' ? (salon.providerType === 'freelancer' ? 'مستقلة معتمدة ✓' : 'معتمد رسمي ✓') :
-                  salon.status === 'pending_verification' ? 'المستندات قيد المراجعة ⏳' : 'مطلوب وثيقة العمل الحر/السجل ⚠️'
+                  isSalonApproved ? (salon.providerType === 'freelancer' ? 'مستقلة معتمدة ✓' : 'معتمد رسمي ✓') :
+                  isSuspended ? 'حساب معلق مؤقتاً ⚠️' :
+                  isRejected ? 'طلب الانضمام مرفوض ❌' :
+                  'المستندات قيد المراجعة والتدقيق ⏳'
                 }
               </span>
             </div>
@@ -336,29 +353,33 @@ export const SalonDashboardView: React.FC<Props> = ({
           </div>
         </div>
 
-        {salon.status !== 'verified' && (
+        {!isSalonApproved && (
           <div className={`w-full sm:w-auto p-3.5 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-            salon.status === 'suspended'
+            isRejected
               ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+              : isSuspended
+              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
               : 'bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200'
           }`}>
             <div className="flex items-start gap-2.5">
-              {salon.status === 'suspended' ? (
+              {isRejected ? (
                 <ShieldAlert className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+              ) : isSuspended ? (
+                <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               ) : (
                 <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               )}
               <div className="space-y-0.5">
                 <span className="font-bold block">
-                  {salon.status === 'suspended'
-                    ? 'تم تعليق/رفض الاعتماد من الإدارة لحين تصحيح المستندات'
-                    : salon.status === 'pending_verification'
-                    ? 'المستندات مرفوعة وقيد المراجعة الإدارية. الحجوزات معلقة مؤقتاً لحين الاعتماد.'
-                    : 'يلزم رفع السجل التجاري ورخصة البلدية من تبويب "الاتفاقية والتحقق" لتفعيل الصالون.'}
+                  {isRejected
+                    ? 'تم رفض طلب الاعتماد من قبل الإدارة.'
+                    : isSuspended
+                    ? 'تم تعليق الصالون مؤقتاً لحين استكمال وتحديث المستندات.'
+                    : 'المستندات مرفوعة وقيد التدقيق الإداري. نشر الخدمات والحجوزات متاح فور الاعتماد.'}
                 </span>
                 {salon.verificationNotes && (
                   <p className="text-[11px] text-rose-700 dark:text-rose-300 font-semibold bg-white/70 dark:bg-slate-900/60 p-1.5 rounded-lg border border-rose-200 dark:border-rose-900/50">
-                    سبب قرار المشرف: {salon.verificationNotes}
+                    ملاحظة الإدارة: {salon.verificationNotes}
                   </p>
                 )}
               </div>
@@ -366,12 +387,12 @@ export const SalonDashboardView: React.FC<Props> = ({
             <button
               onClick={() => setActiveMenu('الاتفاقية والتحقق')}
               className={`px-3 py-1.5 font-bold rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer ${
-                salon.status === 'suspended'
+                isRejected
                   ? 'bg-rose-600 hover:bg-rose-700 text-white'
                   : 'bg-amber-500 hover:bg-amber-600 text-slate-900'
               }`}
             >
-              تصحيح ورفع المستندات
+              مراجعة ورفع المستندات
             </button>
           </div>
         )}
@@ -480,7 +501,7 @@ export const SalonDashboardView: React.FC<Props> = ({
         </div>
       </div>
 
-      {salon.status === 'verified' && (
+      {isSalonApproved && (
         <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0">
@@ -1038,16 +1059,50 @@ export const SalonDashboardView: React.FC<Props> = ({
           {/* VIEW: SERVICES (الخدمات) */}
           {activeMenu === 'الخدمات' && (
             <div className="space-y-6">
+              {!isSalonApproved && (
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-600/40 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-3 shadow-xs">
+                  <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />
+                  <div>
+                    <span className="font-bold block mb-0.5">
+                      {isPending && 'حساب الصالون قيد المراجعة والتدقيق الإداري ⏳'}
+                      {isSuspended && 'حساب الصالون معلق مؤقتاً بانتظار استكمال المستندات ⚠️'}
+                      {isRejected && 'تم رفض طلب الانضمام ❌'}
+                    </span>
+                    <span>
+                      نشر الخدمات للعميلات مقيد حالياً. بمجرد قيام إدارة تدلّلي باعتماد أوراق الصالون، ستتمكنين من نشر الخدمات واستقبال الحجوزات فوراً.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {!isAddingService ? (
                 /* Services List */
                 <div className="bg-white dark:bg-[#121218] border border-rose-100 dark:border-slate-800/80 rounded-2xl p-6 space-y-6 min-h-[400px] shadow-xs">
                   <div className="flex items-center justify-between">
                     <button
-                      onClick={() => setIsAddingService(true)}
-                      className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-md shadow-rose-600/20 cursor-pointer"
+                      onClick={() => {
+                        if (!isSalonApproved) {
+                          setServiceRestrictionWarning(
+                            isPending 
+                              ? 'حساب الصالون قيد التدقيق الإداري حالياً. لا يمكن نشر الخدمات حتى اعتماد الصالون من إدارة المنصة.' 
+                              : isSuspended
+                              ? 'حساب الصالون معلق مؤقتاً. يرجى التوجه لتبويب "الاتفاقية والتحقق" لإكمال المستندات.'
+                              : 'طلب اعتماد الصالون مرفوض. يرجى مراجعة إدارة المنصة.'
+                          );
+                          return;
+                        }
+                        setServiceRestrictionWarning(null);
+                        setIsAddingService(true);
+                      }}
+                      className={`px-4 py-2 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-md cursor-pointer ${
+                        isSalonApproved
+                          ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20'
+                          : 'bg-slate-400 dark:bg-slate-700 text-slate-100 cursor-not-allowed opacity-80'
+                      }`}
                     >
                       <Plus className="w-4 h-4" />
                       <span>إضافة خدمة جديدة لصالونك</span>
+                      {!isSalonApproved && <Lock className="w-3.5 h-3.5 mr-1" />}
                     </button>
                     <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">
                       إجمالي الخدمات: {salonServices.length}
@@ -1250,7 +1305,7 @@ export const SalonDashboardView: React.FC<Props> = ({
 
           {/* VIEW: BOOKINGS & CALENDAR & MANUAL POS & CONFLICT SHIELD (نظام الحجوزات الموحد مع درع منع التضارب 100%) */}
           {(activeMenu === 'الحجوزات' || activeMenu === 'التقويم' || activeMenu === 'المبيعات اليدوية' || activeMenu === 'درع منع التضارب 100% 🛡️') && (
-            salon.status !== 'verified' ? (
+            !isSalonApproved ? (
               <div className="bg-white dark:bg-[#121218] border border-amber-200 dark:border-amber-500/30 rounded-2xl p-8 text-center space-y-4">
                 <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 mx-auto flex items-center justify-center text-amber-500 shadow-md">
                   <ShieldAlert className="w-8 h-8" />
@@ -1307,7 +1362,7 @@ export const SalonDashboardView: React.FC<Props> = ({
 
           {/* VIEW: FLASH BOOSTER / عروض اللحظة الأخيرة */}
           {activeMenu === 'عروض اللحظة الأخيرة ⚡' && (
-            salon.status !== 'verified' ? (
+            !isSalonApproved ? (
               <div className="bg-white dark:bg-[#121218] border border-amber-200 dark:border-amber-500/30 rounded-2xl p-8 text-center space-y-4">
                 <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 mx-auto flex items-center justify-center text-amber-500 shadow-md">
                   <ShieldAlert className="w-8 h-8" />
@@ -1410,7 +1465,7 @@ export const SalonDashboardView: React.FC<Props> = ({
 
           {/* VIEW: PAYOUTS & SMART DEPOSIT / المدفوعات والسحب والعربون */}
           {(activeMenu === 'المدفوعات والسحب والعربون' || activeMenu === 'المدفوعات والسحب') && (
-            salon.status !== 'verified' ? (
+            !isSalonApproved ? (
               <div className="bg-white dark:bg-[#121218] border border-amber-200 dark:border-amber-500/30 rounded-2xl p-8 text-center space-y-4 shadow-xs">
                 <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 mx-auto flex items-center justify-center text-amber-500 shadow-md">
                   <CreditCard className="w-8 h-8" />

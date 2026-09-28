@@ -9,11 +9,15 @@
         "salonName": { "type": "string" },
         "city": { "type": "string" },
         "phone": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "verified", "rejected", "suspended"] },
         "rating": { "type": "number" },
         "reviewsCount": { "type": "number" },
-        "slug": { "type": "string" }
+        "slug": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "verificationNotes": { "type": "string" }
       },
-      "required": ["id", "salonName", "city"]
+      "required": ["id", "salonName", "city", "status"]
     },
     "Service": {
       "title": "Service",

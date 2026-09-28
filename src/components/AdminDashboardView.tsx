@@ -49,6 +49,9 @@ interface Props {
   bookings: Booking[];
   onApproveSalon?: (salonId: string) => void;
   onRejectSalon?: (salonId: string, reason?: string) => void;
+  onSuspendSalon?: (salonId: string, reason?: string) => void;
+  onDeleteSalon?: (salonId: string) => void;
+  onPurgeLegacySalons?: () => void;
   onUpdateSalonDocumentStatus?: (salonId: string, docId: string, status: 'approved' | 'rejected', reason?: string) => void;
   onSimulateAdminDocsNotification?: () => void;
 }
@@ -58,16 +61,20 @@ export const AdminDashboardView: React.FC<Props> = ({
   bookings,
   onApproveSalon,
   onRejectSalon,
+  onSuspendSalon,
+  onDeleteSalon,
+  onPurgeLegacySalons,
   onUpdateSalonDocumentStatus,
   onSimulateAdminDocsNotification
 }) => {
   const [selectedTab, setSelectedTab] = useState<'overview' | 'verifications' | 'salons' | 'tap_gateway'>('overview');
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'summary'>('daily');
   const [selectedTapPlan, setSelectedTapPlan] = useState<'starter' | 'standard' | 'advanced'>('starter');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'suspended' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [rejectionModal, setRejectionModal] = useState<{ isOpen: boolean; salonId: string; docId?: string; salonName: string } | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
+  const [actionModal, setActionModal] = useState<{ isOpen: boolean; salonId: string; salonName: string; mode: 'reject' | 'suspend'; docId?: string } | null>(null);
+  const [actionReason, setActionReason] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [inspectDocModal, setInspectDocModal] = useState<{
     isOpen: boolean;
     salonName: string;
@@ -173,21 +180,22 @@ export const AdminDashboardView: React.FC<Props> = ({
     };
   }, [bookings]);
 
-  const verifiedSalons = salons.filter(s => s.status === 'verified');
-  const pendingSalons = salons.filter(s => s.status === 'pending_verification' || (s.documents && s.documents.some(d => d.status === 'pending')));
-  const rejectedSalons = salons.filter(s => s.status === 'suspended' || (s.documents && s.documents.some(d => d.status === 'rejected')));
-  const requiringDocsSalons = salons.filter(s => s.status === 'documents_required' || (!s.documents || s.documents.length === 0));
+  const verifiedSalons = salons.filter(s => s.status === 'approved' || s.status === 'verified');
+  const pendingSalons = salons.filter(s => s.status === 'pending' || s.status === 'pending_verification' || (s.documents && s.documents.some(d => d.status === 'pending')));
+  const suspendedSalons = salons.filter(s => s.status === 'suspended' || s.status === 'documents_required');
+  const rejectedSalons = salons.filter(s => s.status === 'rejected');
 
   const filteredPending = salons.filter(s => {
     // Status Filter condition
     if (statusFilter === 'pending') {
-      const isPending = s.status === 'pending_verification' || (s.documents && s.documents.some(d => d.status === 'pending'));
+      const isPending = s.status === 'pending' || s.status === 'pending_verification' || (s.documents && s.documents.some(d => d.status === 'pending'));
       if (!isPending) return false;
     } else if (statusFilter === 'verified') {
-      if (s.status !== 'verified') return false;
+      if (s.status !== 'approved' && s.status !== 'verified') return false;
+    } else if (statusFilter === 'suspended') {
+      if (s.status !== 'suspended' && s.status !== 'documents_required') return false;
     } else if (statusFilter === 'rejected') {
-      const isRejected = s.status === 'suspended' || (s.documents && s.documents.some(d => d.status === 'rejected'));
-      if (!isRejected) return false;
+      if (s.status !== 'rejected') return false;
     }
 
     const matchesSearch = s.salonName.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -201,15 +209,23 @@ export const AdminDashboardView: React.FC<Props> = ({
     }
   };
 
-  const handleConfirmReject = () => {
-    if (!rejectionModal) return;
-    if (rejectionModal.docId && onUpdateSalonDocumentStatus) {
-      onUpdateSalonDocumentStatus(rejectionModal.salonId, rejectionModal.docId, 'rejected', rejectionReason || 'المستند غير واضح أو منتهي الصلاحية');
-    } else if (onRejectSalon) {
-      onRejectSalon(rejectionModal.salonId, rejectionReason || 'المستندات المرفقة لا تطابق متطلبات الامتثال التجاري');
+  const handleConfirmAction = () => {
+    if (!actionModal) return;
+    if (actionModal.docId && onUpdateSalonDocumentStatus) {
+      onUpdateSalonDocumentStatus(actionModal.salonId, actionModal.docId, 'rejected', actionReason || 'المستند غير واضح أو منتهي الصلاحية');
+    } else if (actionModal.mode === 'suspend') {
+      if (onSuspendSalon) {
+        onSuspendSalon(actionModal.salonId, actionReason || 'المستندات غير مكتملة ويلزم تحديثها');
+      } else if (onRejectSalon) {
+        onRejectSalon(actionModal.salonId, actionReason || 'المستندات غير مكتملة ويلزم تحديثها');
+      }
+    } else if (actionModal.mode === 'reject') {
+      if (onRejectSalon) {
+        onRejectSalon(actionModal.salonId, actionReason || 'المستندات المرفقة لا تطابق متطلبات الامتثال التجاري');
+      }
     }
-    setRejectionModal(null);
-    setRejectionReason('');
+    setActionModal(null);
+    setActionReason('');
   };
 
   return (
@@ -227,7 +243,16 @@ export const AdminDashboardView: React.FC<Props> = ({
             <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mt-0.5">الإدارة العامة • المشرف على الامتثال وتراخيص الصالونات</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {onPurgeLegacySalons && (
+            <button
+              onClick={onPurgeLegacySalons}
+              className="px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 hover:bg-amber-200 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              title="تنظيف وحذف أي صالونات أو بيانات تجريبية متبقية وبدء تجربة نظيفة 100%"
+            >
+              <span>🧹 تنظيف وحذف الصالونات التجريبية نهائياً (Clean Slate)</span>
+            </button>
+          )}
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             بوابة اعتماد التراخيص والسجلات
@@ -916,11 +941,16 @@ export const AdminDashboardView: React.FC<Props> = ({
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                             isSalonApproved 
                               ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' 
-                              : salonItem.status === 'pending_verification'
-                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
-                              : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'
+                              : (salonItem.status === 'suspended' || salonItem.status === 'documents_required')
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-400'
+                              : salonItem.status === 'rejected'
+                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
                           }`}>
-                            {isSalonApproved ? 'معتمد رسمياً ✓' : salonItem.status === 'pending_verification' ? 'بانتظار موافقة الإدارة ⏳' : 'مطلوب إرفاق المستندات'}
+                            {isSalonApproved ? 'معتمد رسمياً ✓' : 
+                             (salonItem.status === 'suspended' || salonItem.status === 'documents_required') ? 'معلق / مستندات ناقصة ⚠️' :
+                             salonItem.status === 'rejected' ? 'مرفوض ❌' : 
+                             'بانتظار موافقة الإدارة ⏳'}
                           </span>
                         </div>
                         <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-3">
@@ -943,38 +973,87 @@ export const AdminDashboardView: React.FC<Props> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {!isSalonApproved ? (
                         <>
                           <button
                             onClick={() => handleApprove(salonItem._id)}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
+                            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
                           >
                             <CheckCircle2 className="w-4 h-4" />
-                            <span>موافقة واعتماد {salonItem.providerType === 'freelancer' ? 'المستقلة' : 'الصالون'} فوراً ✓</span>
+                            <span>موافقة واعتماد فوراً ✓</span>
                           </button>
 
                           <button
-                            onClick={() => setRejectionModal({ isOpen: true, salonId: salonItem._id, salonName: salonItem.salonName })}
-                            className="px-3.5 py-2 bg-rose-100 hover:bg-rose-200 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                            onClick={() => setActionModal({ isOpen: true, salonId: salonItem._id, salonName: salonItem.salonName, mode: 'suspend' })}
+                            className="px-3 py-2 bg-amber-100 hover:bg-amber-200 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 font-bold text-xs rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
+                            title="تعليق الصالون لحين استكمال الأوراق"
                           >
-                            <XCircle className="w-4 h-4" />
-                            <span>رفض الطلب</span>
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>تعليق مؤقت ⚠️</span>
+                          </button>
+
+                          <button
+                            onClick={() => setActionModal({ isOpen: true, salonId: salonItem._id, salonName: salonItem.salonName, mode: 'reject' })}
+                            className="px-3 py-2 bg-rose-100 hover:bg-rose-200 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 font-bold text-xs rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>رفض الطلب ❌</span>
                           </button>
                         </>
                       ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-500/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
                             <ShieldCheck className="w-4 h-4" />
                             <span>الصالون متاح ونشط للعميلات</span>
                           </span>
                           <button
-                            onClick={() => setRejectionModal({ isOpen: true, salonId: salonItem._id, salonName: salonItem.salonName })}
-                            className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg font-medium transition-colors"
+                            onClick={() => setActionModal({ isOpen: true, salonId: salonItem._id, salonName: salonItem.salonName, mode: 'suspend' })}
+                            className="px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 rounded-lg font-bold transition-colors cursor-pointer"
                           >
-                            إلغاء الاعتماد مؤقتاً
+                            تعليق مؤقت
+                          </button>
+                          <button
+                            onClick={() => setActionModal({ isOpen: true, salonId: salonItem._id, salonName: salonItem.salonName, mode: 'reject' })}
+                            className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg font-medium transition-colors cursor-pointer"
+                          >
+                            إلغاء الاعتماد والرفض
                           </button>
                         </div>
+                      )}
+
+                      {onDeleteSalon && (
+                        deleteConfirmId === salonItem._id ? (
+                          <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/60 p-1 rounded-xl border border-rose-200 dark:border-rose-900/60">
+                            <span className="text-[10px] text-rose-700 dark:text-rose-300 font-bold px-1">تأكيد الحذف؟</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onDeleteSalon(salonItem._id);
+                                setDeleteConfirmId(null);
+                              }}
+                              className="px-2 py-1 text-[10px] bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-500 cursor-pointer shadow-xs"
+                            >
+                              نعم، احذف
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="px-1.5 py-1 text-[10px] text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer"
+                            >
+                              إلغاء
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmId(salonItem._id)}
+                            className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
+                            title="حذف نهائي من قاعدة البيانات"
+                          >
+                            🗑️
+                          </button>
+                        )
                       )}
                     </div>
                   </div>
@@ -1360,17 +1439,21 @@ export const AdminDashboardView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Rejection Reason Modal */}
-      {rejectionModal && (
+      {/* Action / Rejection / Suspension Modal */}
+      {actionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-[#121218] border border-rose-200 dark:border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-rose-500" />
-                <span>رفض اعتماد صالون "{rejectionModal.salonName}"</span>
+                <AlertTriangle className={`w-5 h-5 ${actionModal.mode === 'suspend' ? 'text-amber-500' : 'text-rose-500'}`} />
+                <span>
+                  {actionModal.mode === 'suspend'
+                    ? `تعليق اعتماد صالون "${actionModal.salonName}" مؤقتاً`
+                    : `رفض اعتماد صالون "${actionModal.salonName}"`}
+                </span>
               </h3>
               <button 
-                onClick={() => setRejectionModal(null)}
+                onClick={() => setActionModal(null)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
               >
                 <X className="w-5 h-5" />
@@ -1378,17 +1461,47 @@ export const AdminDashboardView: React.FC<Props> = ({
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300">
-              سيتم إيقاف ظهور الصالون فوراً وإرسال إشعار لصاحب الصالون بضرورة تصحيح المستند أو إرفاق رخصة جديدة سارية.
+              {actionModal.mode === 'suspend'
+                ? 'سيتم حجب الصالون مؤقتاً عن البحث والعميلات لحين استكمال الأوراق، وإرسال إشعار لصاحبة الصالون بضرورة إكمال النواقص.'
+                : 'سيتم رفض الطلب وحجب الصالون نهائياً، مع توثيق سبب الرفض وإشعار صاحبة الصالون.'}
             </p>
+
+            {/* Toggle Mode inside Modal */}
+            <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setActionModal(prev => prev ? { ...prev, mode: 'suspend' } : null)}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  actionModal.mode === 'suspend'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                تعليق مؤقت (Suspended)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActionModal(prev => prev ? { ...prev, mode: 'reject' } : null)}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  actionModal.mode === 'reject'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                رفض الطلب (Rejected)
+              </button>
+            </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                سبب الرفض (سيظهر في لوحة تحكم الصالون):
+                سبب القرار (سيصل كإشعار فوري للصالون):
               </label>
               <textarea
-                value={rejectionReason}
-                onChange={e => setRejectionReason(e.target.value)}
-                placeholder="مثال: رخصة البلدية منتهية الصلاحية، يرجى إرفاق الرخصة المجددة من منصة بلدي."
+                value={actionReason}
+                onChange={e => setActionReason(e.target.value)}
+                placeholder={actionModal.mode === 'suspend' 
+                  ? 'مثال: رخصة البلدية منتهية أو شهادة الآيبان غير مطابقة، يرجى تحديثها.'
+                  : 'مثال: الأنشطة المحددة لا تتوافق مع تصنيفات منصة تدلّلي أو السجلات غير نظامية.'}
                 rows={3}
                 className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-rose-500"
               />
@@ -1396,16 +1509,20 @@ export const AdminDashboardView: React.FC<Props> = ({
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
-                onClick={() => setRejectionModal(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                onClick={() => setActionModal(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
               >
                 إلغاء
               </button>
               <button
-                onClick={handleConfirmReject}
-                className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition-colors shadow-md shadow-rose-600/20"
+                onClick={handleConfirmAction}
+                className={`px-4 py-2 text-xs font-bold text-white rounded-xl transition-colors shadow-md cursor-pointer ${
+                  actionModal.mode === 'suspend'
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                    : 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
+                }`}
               >
-                تأكيد الرفض والإيقاف
+                {actionModal.mode === 'suspend' ? 'تأكيد التعليق المؤقت' : 'تأكيد الرفض النهائي'}
               </button>
             </div>
           </div>
@@ -1499,11 +1616,12 @@ export const AdminDashboardView: React.FC<Props> = ({
                   onClick={() => {
                     const targetSalon = salons.find(s => s.salonName === inspectDocModal.salonName);
                     if (targetSalon) {
-                      setRejectionModal({
+                      setActionModal({
                         isOpen: true,
                         salonId: targetSalon._id,
                         docId: inspectDocModal.doc.id,
-                        salonName: inspectDocModal.salonName
+                        salonName: inspectDocModal.salonName,
+                        mode: 'reject'
                       });
                     }
                     setInspectDocModal(null);

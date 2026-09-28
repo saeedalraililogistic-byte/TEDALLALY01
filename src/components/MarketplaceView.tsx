@@ -44,39 +44,17 @@ export const MarketplaceView: React.FC<Props> = ({
   const [selectedSalon, setSelectedSalon] = useState<Salon | null>(null);
   const [showMap, setShowMap] = useState<boolean>(true);
 
-  // Default high-quality flash offers if none passed
-  const defaultFlashOffers: FlashOffer[] = [
-    {
-      id: 'fo_1',
-      salonId: salons[0]?._id || 'kh77cnn230ayx24dvgm71y5wcx8cpcgz',
-      salonName: salons[0]?.salonName || 'صالون احسان',
-      serviceTitle: 'مناكير وباديكير عناية كاملة',
-      originalPrice: 120,
-      discountPrice: 85,
-      discountPercentage: 29,
-      validTimeWindow: 'اليوم: 2:00 م - 4:30 م',
-      remainingSeats: 2,
-      expiresInMinutes: 45,
-    },
-    {
-      id: 'fo_2',
-      salonId: salons[0]?._id || 'kh77cnn230ayx24dvgm71y5wcx8cpcgz',
-      salonName: salons[0]?.salonName || 'صالون احسان',
-      serviceTitle: 'قص واستشوار احترافي',
-      originalPrice: 150,
-      discountPrice: 105,
-      discountPercentage: 30,
-      validTimeWindow: 'اليوم: 5:00 م - 7:00 م',
-      remainingSeats: 1,
-      expiresInMinutes: 90,
-    }
-  ];
-
-  const activeFlashOffers = (flashOffers && flashOffers.length > 0) ? flashOffers : defaultFlashOffers;
+  const activeFlashOffers = (flashOffers && flashOffers.length > 0) ? flashOffers : [];
 
   const filteredSalons = salons.filter(s => {
-    // Strict compliance rule: Only officially verified salons with approved commercial documents appear to clients
-    if (s.status !== 'verified') {
+    // Exclude any legacy test salons
+    const name = (s.salonName || '').toLowerCase();
+    if (name.includes('احسان') || name.includes('إحسان') || name.includes('انامل') || name.includes('أنامل')) {
+      return false;
+    }
+    // Strict compliance rule: Only officially approved / verified salons appear to clients
+    const isApproved = s.status === 'verified' || s.status === 'approved';
+    if (!isApproved) {
       return false;
     }
 

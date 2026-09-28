@@ -67,7 +67,7 @@ export const ProviderRegistrationModal: React.FC<RegistrationModalProps> = ({
       address: isFreelancer ? `خدمة منزلية وحضور - ${city}` : `${city} - ${district}`,
       phone: phone.trim(),
       description: description.trim() || (isFreelancer ? 'خبيرة تجميل ومكياج مستقلة معتمدة' : 'صالون تجميل وعناية متكامل'),
-      status: 'pending_verification', // Starts as pending verification for admin review!
+      status: 'pending', // Starts strictly in pending state for admin review!
       isActive: true,
       providerType: isFreelancer ? 'freelancer' : 'salon',
       ownerId: currentUser?._id || `usr_${newId}`,

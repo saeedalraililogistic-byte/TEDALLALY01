@@ -15,6 +15,12 @@ import {
   updateBookingStatusInFirestore, 
   syncServiceToFirestore,
   syncSalonToFirestore,
+  registerNewSalonInFirestore,
+  updateSalonProfileInFirestore,
+  updateSalonStatusInFirestore,
+  deleteSalonFromFirestore,
+  deleteLegacyTestSalonsFromFirestore,
+  isLegacyTestSalon,
   syncNotificationToFirestore,
   seedInitialDataToFirestore,
   listenToRealtimeSalons,
@@ -96,7 +102,10 @@ export default function App() {
       const saved = localStorage.getItem('tedallaly_persistent_salons');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          const clean = parsed.filter(s => !isLegacyTestSalon(s));
+          if (clean.length > 0) return clean;
+        }
       }
     } catch (e) {
       console.error(e);
@@ -104,10 +113,11 @@ export default function App() {
     return initialSalons;
   });
 
-  // Sync salons to localStorage whenever modified (e.g. approval, rejection, update)
+  // Sync sanitized salons to localStorage whenever modified
   useEffect(() => {
     try {
-      localStorage.setItem('tedallaly_persistent_salons', JSON.stringify(salons));
+      const clean = salons.filter(s => !isLegacyTestSalon(s));
+      localStorage.setItem('tedallaly_persistent_salons', JSON.stringify(clean));
     } catch (e) {
       console.error(e);
     }
@@ -466,10 +476,11 @@ export default function App() {
     // Subscribe to real-time salons updates from Firestore
     const unsubSalons = listenToRealtimeSalons((liveSalons) => {
       setSalons(prevSalons => {
-        const map = new Map<string, Salon>(prevSalons.map(s => [s._id, s]));
-        liveSalons.forEach(ls => {
-          const prev = map.get(ls._id);
-          map.set(ls._id, prev ? { ...prev, ...ls } : ls);
+        const nonLegacyLive = liveSalons.filter(s => !isLegacyTestSalon(s));
+        const map = new Map<string, Salon>();
+        prevSalons.filter(s => !isLegacyTestSalon(s)).forEach(s => map.set(s._id, s));
+        nonLegacyLive.forEach(ls => {
+          map.set(ls._id, ls);
         });
         return Array.from(map.values());
       });
@@ -729,8 +740,20 @@ export default function App() {
 
   // Salon Document Verification & Admin Approval Handlers
   const handleUpdateSalon = (updatedSalon: Salon) => {
-    setSalons(prev => prev.map(s => s._id === updatedSalon._id ? updatedSalon : s));
-    syncSalonToFirestore(updatedSalon);
+    // CRITICAL BUG FIX: Ensure status is NEVER altered or downgraded during routine profile/document updates!
+    setSalons(prev => prev.map(s => {
+      if (s._id === updatedSalon._id) {
+        const isApproved = s.status === 'approved' || s.status === 'verified';
+        return {
+          ...updatedSalon,
+          status: isApproved ? s.status : updatedSalon.status,
+        };
+      }
+      return s;
+    }));
+
+    // Localized Firestore update: strips out status and only modifies safe profile fields!
+    updateSalonProfileInFirestore(updatedSalon._id, updatedSalon);
 
     // Dispatch real-time alert to Platform Admin that salon re-uploaded/updated documents for review
     const adminAlert = createSalonDocumentsReuploadedAdminNotification(updatedSalon);
@@ -759,11 +782,11 @@ export default function App() {
       ownerId,
       ownerEmail,
       ownerName,
-      status: 'pending_verification'
+      status: 'pending' // Starts strictly in pending state for admin review!
     };
 
-    setSalons(prev => [assignedProvider, ...prev]);
-    syncSalonToFirestore(assignedProvider);
+    setSalons(prev => [assignedProvider, ...prev.filter(s => s._id !== assignedProvider._id)]);
+    registerNewSalonInFirestore(assignedProvider);
 
     let providerUser: User;
     if (currentUser) {
@@ -813,7 +836,7 @@ export default function App() {
         salonName: assignedProvider.salonName,
         providerType: assignedProvider.providerType,
         city: assignedProvider.city,
-        status: 'pending_verification'
+        status: 'pending'
       }
     };
     setNotifications(prev => [salonWelcomeNotif, ...prev]);
@@ -840,13 +863,15 @@ export default function App() {
 
     const updatedSalon: Salon = {
       ...targetSalon,
-      status: 'verified',
+      status: 'approved',
       documents: approvedDocuments,
-      approvedAt: new Date().toISOString()
+      approvedAt: new Date().toISOString(),
+      isActive: true,
+      verificationNotes: 'تم اعتماد وتفعيل الصالون رسمياً'
     };
 
     setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
-    syncSalonToFirestore(updatedSalon);
+    updateSalonStatusInFirestore(salonId, 'approved', 'تم اعتماد وتفعيل الصالون رسمياً');
 
     // Create and dispatch real persistent notification targeted directly to the salon owner
     const approvalNotif = createSalonApprovalNotification(updatedSalon);
@@ -861,7 +886,7 @@ export default function App() {
     addToast({
       type: 'success',
       title: isFreelance ? 'تمت الموافقة واعتماد الخبيرة المستقلة! 🛡️' : 'تمت الموافقة واعتماد الصالون بنجاح! 🛡️',
-      description: `تم اعتماد "${targetSalon.salonName}" رسمياً. تم إرسال إشعار فوري لصاحبة الصالون، وأصبح متاحاً للعميلات فوراً.`
+      description: `تم اعتماد "${targetSalon.salonName}" رسمياً وتحديث حالته في Firebase. أصبح نشطاً ومتاحاً للعميلات فوراً.`
     });
   };
 
@@ -871,19 +896,40 @@ export default function App() {
 
     const finalReason = reason && reason.trim().length > 0 
       ? reason 
-      : 'المستندات غير مكتملة أو رخصة البلدية والسجل التجاري غير مطابقة لمتطلبات وزارة التجارة';
+      : 'المستندات المرفقة لا تطابق متطلبات الامتثال التجاري';
 
     const updatedSalon: Salon = {
       ...targetSalon,
-      status: 'suspended',
+      status: 'rejected',
       verificationNotes: finalReason,
+      isActive: false
     };
 
     setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
-    syncSalonToFirestore(updatedSalon);
+    updateSalonStatusInFirestore(salonId, 'rejected', finalReason);
 
     // Create and dispatch real rejection notification with explicit reason directly to the salon owner
-    const rejectionNotif = createSalonRejectionNotification(updatedSalon, finalReason);
+    const rejectionNotif: InAppNotification = {
+      id: `notif_salon_rej_${salonId}_${Date.now()}`,
+      salonId,
+      type: 'salon_rejected',
+      recipientRole: targetSalon.providerType === 'freelancer' ? 'freelancer' : 'salon_owner',
+      recipientId: targetSalon.ownerId || salonId,
+      title: targetSalon.providerType === 'freelancer' 
+        ? 'تم رفض طلب الانضمام كخبيرة مستقلة ❌' 
+        : `تم رفض طلب اعتماد صالون "${targetSalon.salonName}" ❌`,
+      message: `نعتذر منكِ، تم رفض طلب اعتماد ${targetSalon.providerType === 'freelancer' ? 'ملف العمل الحر' : 'الصالون'}. السبب: ${finalReason}. يرجى مراجعة إدارة المنصة.`,
+      timestamp: Date.now(),
+      read: false,
+      urgency: 'high',
+      rejectionReason: finalReason,
+      salonSnapshot: {
+        salonName: targetSalon.salonName,
+        providerType: targetSalon.providerType,
+        city: targetSalon.city,
+        status: 'rejected'
+      }
+    };
     setNotifications(prev => [rejectionNotif, ...prev]);
     syncNotificationToFirestore(rejectionNotif);
 
@@ -892,8 +938,85 @@ export default function App() {
 
     addToast({
       type: 'error',
-      title: 'تم إيقاف/رفض الصالون وتوثيق السبب ⚠️',
-      description: `تم إرسال إشعار فوري لصالون "${targetSalon.salonName}" بالسبب: ${finalReason}`
+      title: 'تم رفض طلب اعتماد الصالون ❌',
+      description: `تم تحديث حالة صالون "${targetSalon.salonName}" إلى مرفوض وإرسال إشعار فوري لصاحبة الحساب بالسبب.`
+    });
+  };
+
+  const handleSuspendSalon = (salonId: string, reason?: string) => {
+    const targetSalon = salons.find(s => s._id === salonId);
+    if (!targetSalon) return;
+
+    const finalReason = reason && reason.trim().length > 0 
+      ? reason 
+      : 'المستندات غير مكتملة ويلزم تحديثها أو إعادة إرفاقها';
+
+    const updatedSalon: Salon = {
+      ...targetSalon,
+      status: 'suspended',
+      verificationNotes: finalReason,
+      isActive: false
+    };
+
+    setSalons(prev => prev.map(s => s._id === salonId ? updatedSalon : s));
+    updateSalonStatusInFirestore(salonId, 'suspended', finalReason);
+
+    // Create and dispatch real suspension notification to the salon owner
+    const suspensionNotif = createSalonRejectionNotification(updatedSalon, finalReason);
+    setNotifications(prev => [suspensionNotif, ...prev]);
+    syncNotificationToFirestore(suspensionNotif);
+
+    setActiveFloatingToast(suspensionNotif);
+    playNotificationSound();
+
+    addToast({
+      type: 'info',
+      title: 'تم تعليق الصالون مؤقتاً ⚠️',
+      description: `تم تعليق حساب صالون "${targetSalon.salonName}" لاستكمال الأوراق وإرسال إشعار فوري لصاحبة الصالون.`
+    });
+  };
+
+  const handleDeleteSalon = async (salonId: string) => {
+    const targetSalon = salons.find(s => s._id === salonId);
+    const salonName = targetSalon?.salonName || 'الصالون';
+
+    setSalons(prev => prev.filter(s => s._id !== salonId));
+    setServices(prev => prev.filter(srv => srv.salonId !== salonId));
+    setBookings(prev => prev.filter(b => b.salonId !== salonId));
+
+    await deleteSalonFromFirestore(salonId);
+
+    addToast({
+      type: 'success',
+      title: 'تم حذف الصالون نهائياً 🗑️',
+      description: `تم حذف صالون "${salonName}" وكافة خدماته المرتبطة به من النظام وFirebase بنجاح.`
+    });
+  };
+
+  const handlePurgeLegacySalons = async () => {
+    // 1. Purge from Firestore
+    const res = await deleteLegacyTestSalonsFromFirestore();
+
+    // 2. Purge from state
+    setSalons(prev => prev.filter(s => !isLegacyTestSalon(s)));
+    setServices(prev => prev.filter(srv => {
+      const name = (srv.name || '').toLowerCase();
+      return !name.includes('احسان') && !name.includes('انامل');
+    }));
+    setBookings(prev => prev.filter(b => {
+      const name = (b.snapshot?.salonName || '').toLowerCase();
+      return !name.includes('احسان') && !name.includes('انامل');
+    }));
+
+    // 3. Clear from localStorage
+    localStorage.removeItem('tedallaly_persistent_salons');
+    localStorage.removeItem('tedallaly_persistent_services');
+    localStorage.removeItem('tedallaly_persistent_bookings');
+
+    addToast({
+      type: 'success',
+      title: 'تم تنظيف الصالونات والبيانات التجريبية نهائياً! 🧹',
+      description: `تم حذف كافة البيانات التجريبية القديمة (صالون إحسان، أنامل ناعمة، إلخ) (${res.deletedSalons} صالون). يمكنك الآن تسجيل صالونك الجديد والبدء بصفحة نظيفة 100%.`
     });
   };
 
@@ -972,6 +1095,7 @@ export default function App() {
       const updatedBooking = { ...booking, status };
       const statusNotif = createStatusChangeNotification(updatedBooking, status, oldStatus);
       setNotifications(prev => [statusNotif, ...prev]);
+      syncNotificationToFirestore(statusNotif);
       setActiveFloatingToast(statusNotif);
       playNotificationSound();
     }
@@ -1519,19 +1643,24 @@ export default function App() {
             bookings={bookings}
             onApproveSalon={handleApproveSalon}
             onRejectSalon={handleRejectSalon}
+            onSuspendSalon={handleSuspendSalon}
+            onDeleteSalon={handleDeleteSalon}
+            onPurgeLegacySalons={handlePurgeLegacySalons}
             onUpdateSalonDocumentStatus={handleUpdateSalonDocumentStatus}
             onSimulateAdminDocsNotification={() => {
-              const pendingOrFirst = salons.find(s => s.status === 'pending_verification') || salons[0];
-              const adminNotif = createSalonRegistrationAdminNotification(pendingOrFirst);
-              setNotifications(prev => [adminNotif, ...prev]);
-              syncNotificationToFirestore(adminNotif);
-              setActiveFloatingToast(adminNotif);
-              playNotificationSound();
-              addToast({
-                type: 'info',
-                title: 'وصول إشعار صالون جديد للإدارة 🏢',
-                description: `قام صالون "${pendingOrFirst.salonName}" برفع أوراقه الرسمية للمراجعة والتدقيق الإداري.`
-              });
+              const pendingOrFirst = salons.find(s => s.status === 'pending' || s.status === 'pending_verification') || salons[0];
+              if (pendingOrFirst) {
+                const adminNotif = createSalonRegistrationAdminNotification(pendingOrFirst);
+                setNotifications(prev => [adminNotif, ...prev]);
+                syncNotificationToFirestore(adminNotif);
+                setActiveFloatingToast(adminNotif);
+                playNotificationSound();
+                addToast({
+                  type: 'info',
+                  title: 'وصول إشعار صالون جديد للإدارة 🏢',
+                  description: `قام صالون "${pendingOrFirst.salonName}" برفع أوراقه الرسمية للمراجعة والتدقيق الإداري.`
+                });
+              }
             }}
           />
         )}

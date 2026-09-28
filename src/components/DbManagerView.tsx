@@ -8,17 +8,18 @@ interface Props {
   services?: Service[];
   bookings?: Booking[];
   onSynced?: (msg: string) => void;
+  onPurgeLegacySalons?: () => void;
 }
 
-export const DbManagerView: React.FC<Props> = ({ salons = [], services = [], bookings = [], onSynced }) => {
+export const DbManagerView: React.FC<Props> = ({ salons = [], services = [], bookings = [], onSynced, onPurgeLegacySalons }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const tables = [
-    { name: 'salons (الصالونات ومراكز التجميل)', count: salons.length || 5, size: '2.9 KB', status: 'متصل بـ Firebase' },
-    { name: 'services (الخدمات والأسعار)', count: services.length || 13, size: '4.1 KB', status: 'متصل بـ Firebase' },
+    { name: 'salons (الصالونات ومراكز التجميل)', count: salons.length, size: '2.9 KB', status: 'متصل بـ Firebase' },
+    { name: 'services (الخدمات والأسعار)', count: services.length, size: '4.1 KB', status: 'متصل بـ Firebase' },
     { name: 'categories (تصنيفات التجميل)', count: 10, size: '1.8 KB', status: 'متصل بـ Firebase' },
-    { name: 'bookings (حجوزات العملاء والطلبات)', count: bookings.length || 28, size: '30.8 KB', status: 'متصل بـ Firebase' },
+    { name: 'bookings (حجوزات العملاء والطلبات)', count: bookings.length, size: '30.8 KB', status: 'متصل بـ Firebase' },
     { name: 'users (بيانات المستخدمين والعملاء)', count: 13, size: '5.3 KB', status: 'محفوظ ومفحوص' },
     { name: 'staff (الأخصائيات والموظفين)', count: 10, size: '1.9 KB', status: 'محفوظ ومفحوص' },
     { name: 'reviews (تقييمات وآراء العملاء)', count: 9, size: '2.8 KB', status: 'محفوظ ومفحوص' },
@@ -65,7 +66,17 @@ export const DbManagerView: React.FC<Props> = ({ salons = [], services = [], boo
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            {onPurgeLegacySalons && (
+              <button
+                onClick={onPurgeLegacySalons}
+                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+                title="حذف صالون احسان وانامل ناعمة وأي صالونات تجريبية نهائياً وبدء منصة نظيفة"
+              >
+                <span>🧹 حذف الصالونات التجريبية (Clean Slate)</span>
+              </button>
+            )}
+
             <button
               onClick={handleSyncToFirebase}
               disabled={isSyncing}

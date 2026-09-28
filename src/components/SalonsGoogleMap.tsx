@@ -47,22 +47,6 @@ export const SALON_COORDINATES: Record<string, { lat: number; lng: number; distr
     district: 'حي العليا',
     cityAr: 'الرياض',
     mapSearch: 'Al Olaya, Riyadh, Saudi Arabia'
-  },
-  // صالون احسان - جدة، حي الحرازات
-  'kh77cnn230ayx24dvgm71y5wcx8cpcgz': {
-    lat: 21.4925,
-    lng: 39.2941,
-    district: 'حي الحرازات - شارع حسين آل الشيخ',
-    cityAr: 'جدة',
-    mapSearch: 'Al Harazat, Jeddah, Saudi Arabia'
-  },
-  // صالون انامل ناعمه - جدة، حي السلامة
-  'kh79dwc8bfs0gqzdf605ay17ph8derhw': {
-    lat: 21.5841,
-    lng: 39.1554,
-    district: 'حي السلامة',
-    cityAr: 'جدة',
-    mapSearch: 'As Salamah, Jeddah, Saudi Arabia'
   }
 };
 

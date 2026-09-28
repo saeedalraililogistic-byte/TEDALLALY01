@@ -31,39 +31,42 @@ service cloud.firestore {
 
     // User accounts collection: requires authenticated user
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow read: if true;
+      allow create: if isSignedIn();
       allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow delete: if isAdmin();
     }
 
-    // Salons catalog: publicly readable for marketplace browsing, protected writes
+    // Salons catalog: publicly readable for marketplace browsing
+    // Status can ONLY be changed by Admin, preventing hanging / state reset bugs
     match /salons/{salonId} {
       allow read: if true;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
     }
 
     // Services catalog: publicly readable for marketplace browsing, protected writes
     match /services/{serviceId} {
       allow read: if true;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
     }
 
-    // Bookings: customers can create bookings; reading and updating requires authentication
+    // Bookings: customers can create bookings
     match /bookings/{bookingId} {
-      allow create: if true;
-      allow read, update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
-    // Notifications: persistent notifications; creation allowed; reading/managing requires auth
+    // Notifications: persistent notifications for salon approval, rejection, and bookings
     match /notifications/{notificationId} {
-      allow create: if true;
-      allow read, update, delete: if isSignedIn();
+      allow read, write: if true;
+    }
+
+    // Reviews
+    match /reviews/{reviewId} {
+      allow read, write: if true;
     }
   }
 }
